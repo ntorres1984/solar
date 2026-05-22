@@ -1,0 +1,1383 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0A0E1A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Solar">
+<title>Solar · Deye 12kW</title>
+<link rel="manifest" href="data:application/json,{&quot;name&quot;:&quot;Solar Híbrido&quot;,&quot;short_name&quot;:&quot;Solar&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;%230A0E1A&quot;,&quot;theme_color&quot;:&quot;%230A0E1A&quot;,&quot;start_url&quot;:&quot;.&quot;}">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+/* ═══ RESET & VARS ═══ */
+:root{
+  --sun:#F5A623;--sun2:#FF6B00;--grid:#4ECDC4;--bat:#A8E063;
+  --load:#C471ED;--bg:#0A0E1A;--bg2:#0F1525;--card:#1A2236;
+  --border:rgba(255,255,255,0.07);--text:#E8EDF5;--muted:#5A6785;
+  --green:#A8E063;--red:#FF6B6B;--euro:#FFD166;--accent:#4ECDC4;
+  --nav-h:64px;--safe-bottom:env(safe-area-inset-bottom,0px);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden}
+body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);
+  display:flex;flex-direction:column;overscroll-behavior:none}
+
+/* ═══ LOCK SCREEN ═══ */
+#lock{position:fixed;inset:0;z-index:9999;background:var(--bg);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:32px}
+#lock .logo-icon{width:72px;height:72px;background:linear-gradient(135deg,var(--sun),var(--sun2));
+  border-radius:22px;display:flex;align-items:center;justify-content:center;font-size:36px;
+  box-shadow:0 0 48px rgba(245,166,35,0.5);animation:pulse 3s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 48px rgba(245,166,35,0.4)}50%{box-shadow:0 0 72px rgba(245,166,35,0.7)}}
+#lock h1{font-size:22px;font-weight:800;text-align:center}
+#lock p{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);text-align:center}
+#lock-form{display:flex;flex-direction:column;gap:12px;width:100%;max-width:320px}
+#lock-pwd{background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:16px 18px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:18px;
+  text-align:center;outline:none;letter-spacing:4px;width:100%;
+  transition:border-color .2s}
+#lock-pwd:focus{border-color:rgba(78,205,196,0.5)}
+#lock-btn{background:linear-gradient(135deg,rgba(78,205,196,0.25),rgba(78,205,196,0.08));
+  border:1px solid rgba(78,205,196,0.5);color:var(--accent);font-family:'JetBrains Mono',monospace;
+  font-size:14px;font-weight:700;padding:15px;border-radius:14px;cursor:pointer;letter-spacing:2px;width:100%}
+#lock-btn:active{opacity:.8;transform:scale(.98)}
+#lock-err{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--red);text-align:center;min-height:16px}
+#lock-hint{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);text-align:center}
+
+/* ═══ APP SHELL ═══ */
+#app{display:none;flex-direction:column;height:100%}
+
+/* ═══ TOP BAR ═══ */
+.topbar{background:var(--bg2);border-bottom:1px solid var(--border);
+  padding:12px 16px 10px;padding-top:calc(12px + env(safe-area-inset-top,0px));
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.topbar-logo{display:flex;align-items:center;gap:10px}
+.topbar-icon{width:32px;height:32px;background:linear-gradient(135deg,var(--sun),var(--sun2));
+  border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;
+  box-shadow:0 0 16px rgba(245,166,35,0.4);animation:pulse 3s ease-in-out infinite}
+.topbar-title{font-size:15px;font-weight:800}
+.topbar-sub{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted)}
+.topbar-right{text-align:right}
+.topbar-time{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:500}
+.topbar-date{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted)}
+
+/* ═══ STATUS BAR ═══ */
+.statusbar{padding:6px 16px;display:flex;align-items:center;justify-content:space-between;
+  flex-shrink:0;border-bottom:1px solid var(--border)}
+.pill{display:flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:10px}
+.pill.ok{color:var(--green)}.pill.warn{color:var(--euro)}.pill.err{color:var(--red)}
+.dot{width:6px;height:6px;border-radius:50%;background:currentColor;animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.updated{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted)}
+
+/* ═══ SCROLL AREA ═══ */
+.pages{flex:1;overflow:hidden;position:relative}
+.page{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;
+  padding:16px 14px calc(var(--nav-h) + var(--safe-bottom) + 16px);
+  display:none;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.page.active{display:block}
+
+/* ═══ BOTTOM NAV ═══ */
+.nav{position:fixed;bottom:0;left:0;right:0;z-index:100;
+  background:var(--bg2);border-top:1px solid var(--border);
+  display:flex;align-items:stretch;
+  padding-bottom:var(--safe-bottom);height:calc(var(--nav-h) + var(--safe-bottom))}
+.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:3px;cursor:pointer;background:none;border:none;color:var(--muted);
+  font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;letter-spacing:.5px;
+  transition:color .2s;padding:8px 4px;position:relative}
+.nav-btn.active{color:var(--sun)}
+.nav-btn.active::before{content:'';position:absolute;top:0;left:20%;right:20%;height:2px;
+  background:linear-gradient(90deg,transparent,var(--sun),transparent);border-radius:0 0 2px 2px}
+.nav-icon{font-size:20px;line-height:1}
+
+/* ═══ CARDS ═══ */
+.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:16px;margin-bottom:12px}
+.card-label{font-size:9px;font-weight:700;letter-spacing:3px;color:var(--muted);
+  font-family:'JetBrains Mono',monospace;margin-bottom:10px}
+
+/* ═══ LIVE — 4 big metrics ═══ */
+.metrics-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.metric{background:var(--card);border:1px solid var(--border);border-radius:18px;
+  padding:16px 14px;position:relative;overflow:hidden}
+.metric::after{content:'';position:absolute;top:-20px;right:-20px;width:60px;height:60px;
+  border-radius:50%;opacity:.08}
+.metric.pv::after{background:var(--sun)}
+.metric.bat::after{background:var(--bat)}
+.metric.grid::after{background:var(--grid)}
+.metric.load::after{background:var(--load)}
+.metric-lbl{font-size:9px;font-weight:700;letter-spacing:2px;color:var(--muted);
+  font-family:'JetBrains Mono',monospace;margin-bottom:6px}
+.metric-val{font-size:28px;font-weight:800;letter-spacing:-1px;line-height:1}
+.metric.pv .metric-val{color:var(--sun)}
+.metric.bat .metric-val{color:var(--bat)}
+.metric.grid .metric-val{color:var(--grid)}
+.metric.load .metric-val{color:var(--load)}
+.metric-unit{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);margin-top:2px}
+.metric-sub{font-family:'JetBrains Mono',monospace;font-size:9px;margin-top:6px}
+.batbar{margin-top:8px;background:rgba(255,255,255,0.06);border-radius:100px;height:4px;overflow:hidden}
+.batfill{height:100%;border-radius:100px;background:linear-gradient(90deg,var(--bat),var(--accent));
+  transition:width 1s ease;position:relative;overflow:hidden}
+.batfill::after{content:'';position:absolute;inset:0;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.3),transparent);animation:shim 2s linear infinite}
+@keyframes shim{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+
+/* ═══ FLOW DIAGRAM ═══ */
+.flow-wrap{background:var(--card);border:1px solid var(--border);border-radius:18px;
+  padding:16px 12px;margin-bottom:12px}
+.flow-grid{display:grid;grid-template-columns:1fr 40px 1fr 40px 1fr;
+  grid-template-rows:auto 40px auto 40px auto;align-items:center;justify-items:center;gap:2px}
+.fg-solar{grid-column:3;grid-row:1}
+.fg-atop{grid-column:3;grid-row:2}
+.fg-bat{grid-column:1;grid-row:3}
+.fg-lbat{grid-column:2;grid-row:3}
+.fg-inv{grid-column:3;grid-row:3}
+.fg-lgrid{grid-column:4;grid-row:3}
+.fg-grid{grid-column:5;grid-row:3}
+.fg-abot{grid-column:3;grid-row:4}
+.fg-load{grid-column:3;grid-row:5}
+.fnode{display:flex;flex-direction:column;align-items:center;gap:5px}
+.ficon{width:60px;height:60px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:24px}
+.ficon.solar{background:linear-gradient(135deg,rgba(245,166,35,.2),rgba(255,107,0,.1));border:2px solid rgba(245,166,35,.4)}
+.ficon.inv{background:linear-gradient(135deg,rgba(78,205,196,.2),rgba(78,205,196,.05));border:2px solid rgba(78,205,196,.5);
+  width:72px;height:72px;border-radius:18px;font-size:30px}
+.ficon.bat{background:linear-gradient(135deg,rgba(168,224,99,.2),rgba(168,224,99,.05));border:2px solid rgba(168,224,99,.4)}
+.ficon.grid{background:linear-gradient(135deg,rgba(78,205,196,.15),rgba(78,205,196,.05));border:2px solid rgba(78,205,196,.3)}
+.ficon.load{background:linear-gradient(135deg,rgba(196,113,237,.2),rgba(196,113,237,.05));border:2px solid rgba(196,113,237,.4)}
+.flabel{font-size:9px;font-weight:700;letter-spacing:1px;font-family:'JetBrains Mono',monospace}
+.fval{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;
+  padding:2px 8px;border-radius:100px;background:rgba(255,255,255,.06)}
+.fline{position:relative;overflow:hidden}
+.fline.h{width:36px;height:2px}.fline.v{width:2px;height:38px}
+.fline .tr{position:absolute;inset:0;background:rgba(255,255,255,.1);border-radius:2px}
+.fline .mv{position:absolute;border-radius:2px}
+.fline.h .mv{animation:fh 1.5s linear infinite}
+.fline.v .mv{animation:fv 1.5s linear infinite}
+.fline.sun .mv{background:linear-gradient(90deg,transparent,var(--sun),transparent);height:100%;width:28px}
+.fline.bat .mv{background:linear-gradient(90deg,transparent,var(--bat),transparent);height:100%;width:28px}
+.fline.batv .mv{background:linear-gradient(0deg,transparent,var(--bat),transparent);width:100%;height:20px}
+.fline.grd .mv{background:linear-gradient(90deg,transparent,var(--grid),transparent);height:100%;width:28px}
+@keyframes fh{0%{transform:translateX(-28px)}100%{transform:translateX(36px)}}
+@keyframes fv{0%{transform:translateY(38px)}100%{transform:translateY(-20px)}}
+
+/* ═══ DAY STATS ═══ */
+.day-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.day-stat{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px 12px}
+.day-stat-lbl{font-size:9px;font-weight:700;letter-spacing:2px;color:var(--muted);
+  font-family:'JetBrains Mono',monospace;margin-bottom:6px}
+.day-stat-val{font-size:22px;font-weight:800}
+
+/* ═══ FIN CARDS ═══ */
+.fin-card{background:var(--card);border:1px solid var(--border);border-radius:18px;
+  padding:16px;margin-bottom:10px;position:relative;overflow:hidden}
+.fin-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:18px 18px 0 0}
+.fin-card.imp::before{background:linear-gradient(90deg,var(--red),transparent)}
+.fin-card.exp::before{background:linear-gradient(90deg,var(--green),transparent)}
+.fin-card.sav::before{background:linear-gradient(90deg,var(--euro),transparent)}
+.fin-card.bal::before{background:linear-gradient(90deg,var(--accent),transparent)}
+.fin-header{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.fin-icon{font-size:20px}
+.fin-lbl{font-size:9px;font-weight:700;letter-spacing:2px;color:var(--muted);font-family:'JetBrains Mono',monospace}
+.fin-kwh{font-size:26px;font-weight:800;margin-bottom:2px}
+.fin-card.imp .fin-kwh{color:var(--red)}
+.fin-card.exp .fin-kwh{color:var(--green)}
+.fin-card.sav .fin-kwh{color:var(--euro)}
+.fin-card.bal .fin-kwh{color:var(--accent)}
+.fin-sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);margin-bottom:10px}
+.fin-row{display:flex;justify-content:space-between;align-items:center;
+  background:var(--bg2);border-radius:10px;padding:9px 12px;margin-top:6px}
+.fin-row-lbl{font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace}
+.fin-row-val{font-size:15px;font-weight:800}
+.fin-card.imp .fin-row-val{color:var(--red)}
+.fin-card.exp .fin-row-val{color:var(--green)}
+.fin-card.sav .fin-row-val{color:var(--euro)}
+.fin-card.bal .fin-row-val{color:var(--accent)}
+.bal-rows{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.bal-row{display:flex;justify-content:space-between;padding:7px 10px;
+  border-radius:8px;background:var(--bg2);font-family:'JetBrains Mono',monospace}
+.bal-row-lbl{font-size:10px;color:var(--muted)}
+.bal-row-val{font-size:12px;font-weight:700}
+.pos{color:var(--green)}.neg{color:var(--red)}
+
+/* ═══ CHART ═══ */
+.chart-card{background:var(--card);border:1px solid var(--border);border-radius:18px;
+  padding:16px;margin-bottom:12px}
+.chart-lbl{font-size:9px;font-weight:700;letter-spacing:3px;color:var(--muted);
+  font-family:'JetBrains Mono',monospace;margin-bottom:12px}
+.chart-wrap{height:160px;position:relative}
+
+/* ═══ TABS (inline, para financeiro) ═══ */
+.itabs{display:flex;gap:8px;margin-bottom:14px}
+.itab{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;
+  padding:7px 14px;border-radius:8px;cursor:pointer;border:1px solid var(--border);
+  background:transparent;color:var(--muted);transition:all .2s;flex:1;text-align:center}
+.itab.on{background:linear-gradient(135deg,rgba(255,209,102,.18),rgba(255,209,102,.05));
+  border-color:rgba(255,209,102,.5);color:var(--euro)}
+.itp{display:none}.itp.on{display:block}
+
+/* ═══ TECH PAGE ═══ */
+.tech-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.tech-stat{background:var(--card);border:1px solid var(--border);border-radius:16px;
+  padding:14px 12px;text-align:center}
+.tech-stat-lbl{font-size:9px;font-weight:700;letter-spacing:2px;color:var(--muted);
+  font-family:'JetBrains Mono',monospace;margin-bottom:6px}
+.tech-stat-val{font-size:26px;font-weight:800}
+.minibar{margin-top:8px;background:rgba(255,255,255,.06);border-radius:100px;height:4px;overflow:hidden}
+.minibar-fill{height:100%;border-radius:100px;transition:width 1s}
+
+/* ═══ SETTINGS ═══ */
+.settings-section{margin-bottom:16px}
+.settings-title{font-size:9px;font-weight:700;letter-spacing:3px;color:var(--muted);
+  font-family:'JetBrains Mono',monospace;margin-bottom:10px}
+.settings-card{background:var(--card);border:1px solid var(--border);border-radius:18px;overflow:hidden}
+.settings-row{display:flex;align-items:center;justify-content:space-between;
+  padding:14px 16px;border-bottom:1px solid var(--border)}
+.settings-row:last-child{border-bottom:none}
+.settings-row-lbl{font-size:13px;font-weight:600}
+.settings-row-sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);margin-top:2px}
+.settings-input{background:var(--bg2);border:1px solid var(--border);border-radius:8px;
+  padding:7px 10px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;
+  outline:none;width:90px;text-align:right}
+.settings-btn{width:100%;background:linear-gradient(135deg,rgba(78,205,196,.2),rgba(78,205,196,.05));
+  border:1px solid rgba(78,205,196,.4);color:var(--accent);font-family:'JetBrains Mono',monospace;
+  font-size:12px;font-weight:700;padding:13px;border-radius:12px;cursor:pointer;letter-spacing:1px;
+  margin-top:10px}
+.settings-btn:active{opacity:.8}
+.settings-btn.danger{background:linear-gradient(135deg,rgba(255,107,107,.15),rgba(255,107,107,.05));
+  border-color:rgba(255,107,107,.4);color:var(--red);margin-top:6px}
+.settings-btn.update{background:linear-gradient(135deg,rgba(255,209,102,.2),rgba(255,209,102,.05));
+  border-color:rgba(255,209,102,.4);color:var(--euro)}
+
+/* ═══ ALERT ITEMS ═══ */
+.alert-item{display:flex;align-items:flex-start;gap:10px;padding:10px 0;
+  border-bottom:1px solid var(--border)}
+.alert-item:last-child{border-bottom:none}
+.alert-icon{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;
+  justify-content:center;font-size:13px;flex-shrink:0}
+.alert-icon.ok{background:rgba(168,224,99,.15)}
+.alert-icon.warn{background:rgba(245,166,35,.15)}
+.alert-icon.info{background:rgba(78,205,196,.15)}
+.alert-t{font-size:12px;font-weight:600;margin-bottom:2px}
+.alert-s{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted)}
+
+/* ═══ WEEK/MONTH BARS ═══ */
+.period-tabs{display:flex;gap:8px;margin-bottom:14px}
+.period-tab{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;
+  padding:7px 14px;border-radius:8px;cursor:pointer;border:1px solid var(--border);
+  background:transparent;color:var(--muted);transition:all .2s}
+.period-tab.on{background:rgba(255,209,102,.15);border-color:rgba(255,209,102,.5);color:var(--euro)}
+
+/* ═══ MISC ═══ */
+.section-title{font-size:10px;font-weight:700;letter-spacing:3px;color:var(--muted);
+  font-family:'JetBrains Mono',monospace;margin:16px 0 10px;display:flex;align-items:center;gap:10px}
+.section-title::after{content:'';flex:1;height:1px;background:var(--border)}
+</style>
+</head>
+<body>
+
+<!-- ═══ LOCK SCREEN ═══ -->
+<div id="lock">
+  <div class="logo-icon">☀️</div>
+  <div>
+    <h1>Sistema Solar Híbrido</h1>
+    <p>DEYE 12KW · FELICITY 48V</p>
+  </div>
+  <div id="lock-form">
+    <input id="lock-pwd" type="password" placeholder="Password" autocomplete="current-password">
+    <button id="lock-btn">ENTRAR</button>
+    <div id="lock-err"></div>
+    <div id="lock-hint"></div>
+  </div>
+</div>
+
+<!-- ═══ APP ═══ -->
+<div id="app">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="topbar-logo">
+      <div class="topbar-icon">☀️</div>
+      <div>
+        <div class="topbar-title">Solar Híbrido</div>
+        <div class="topbar-sub">DEYE 12KW · FELICITY 48V</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="topbar-time" id="clk">--:--:--</div>
+      <div class="topbar-date" id="dstr"></div>
+    </div>
+  </div>
+
+  <!-- STATUS BAR -->
+  <div class="statusbar">
+    <div class="pill ok" id="status-pill"><div class="dot"></div><span id="status-txt">A LIGAR...</span></div>
+    <div class="updated" id="updated-ts"></div>
+  </div>
+
+  <!-- PAGES -->
+  <div class="pages">
+
+    <!-- ═══ PAGE: LIVE ═══ -->
+    <div class="page active" id="page-live">
+
+      <!-- 4 métricas principais -->
+      <div class="metrics-grid">
+        <div class="metric pv">
+          <div class="metric-lbl">☀️ SOLAR</div>
+          <div class="metric-val" id="m-pv">—</div>
+          <div class="metric-unit">kW de 12 kW</div>
+          <div class="metric-sub" style="color:var(--sun)" id="m-pv-s">—</div>
+        </div>
+        <div class="metric bat">
+          <div class="metric-lbl">🔋 BATERIA</div>
+          <div class="metric-val" id="m-bat">—</div>
+          <div class="metric-unit" id="m-bat-s">%</div>
+          <div class="batbar"><div class="batfill" id="m-batbar" style="width:0%"></div></div>
+        </div>
+        <div class="metric grid">
+          <div class="metric-lbl">🔌 REDE</div>
+          <div class="metric-val" id="m-grid">—</div>
+          <div class="metric-unit" id="m-grid-s">kW</div>
+          <div class="metric-sub" style="color:var(--muted)" id="m-volt">—</div>
+        </div>
+        <div class="metric load">
+          <div class="metric-lbl">🏠 CONSUMO</div>
+          <div class="metric-val" id="m-load">—</div>
+          <div class="metric-unit">kW activos</div>
+          <div class="metric-sub" style="color:var(--load)" id="m-temp">—</div>
+        </div>
+      </div>
+
+      <!-- Fluxo de energia -->
+      <div class="flow-wrap">
+        <div class="card-label" style="margin-bottom:14px">⚡ FLUXO DE ENERGIA</div>
+        <div class="flow-grid">
+          <div class="fg-solar"><div class="fnode"><div class="ficon solar">☀️</div><div class="flabel" style="color:var(--sun)">SOLAR</div><div class="fval" id="f-pv">— W</div></div></div>
+          <div class="fg-atop"><div class="fline v sun"><div class="tr"></div><div class="mv"></div></div></div>
+          <div class="fg-bat"><div class="fnode"><div class="ficon bat">🔋</div><div class="flabel" style="color:var(--bat)">FELICITY</div><div class="fval" id="f-bat">—%</div></div></div>
+          <div class="fg-lbat"><div class="fline h bat"><div class="tr"></div><div class="mv"></div></div></div>
+          <div class="fg-inv"><div class="fnode"><div class="ficon inv">⚡</div><div class="flabel" style="color:var(--accent)">DEYE 12kW</div><div class="fval" style="color:var(--accent)" id="f-temp">—</div></div></div>
+          <div class="fg-lgrid"><div class="fline h grd"><div class="tr"></div><div class="mv"></div></div></div>
+          <div class="fg-grid"><div class="fnode"><div class="ficon grid">🔌</div><div class="flabel" style="color:var(--grid)">REDE</div><div class="fval" style="color:var(--grid)" id="f-grid">— W</div></div></div>
+          <div class="fg-abot"><div class="fline v batv"><div class="tr"></div><div class="mv"></div></div></div>
+          <div class="fg-load"><div class="fnode"><div class="ficon load">🏠</div><div class="flabel" style="color:var(--load)">CONSUMO</div><div class="fval" id="f-load">— W</div></div></div>
+        </div>
+      </div>
+
+      <!-- Gráfico live -->
+      <div class="chart-card">
+        <div class="chart-lbl">PRODUÇÃO — HOJE (kW, de 30 em 30 min)</div>
+        <div class="chart-wrap"><canvas id="ch-line"></canvas></div>
+      </div>
+
+      <!-- Resumo dia -->
+      <div class="section-title">📊 RESUMO DO DIA</div>
+      <div class="day-grid">
+        <div class="day-stat"><div class="day-stat-lbl">☀️ PRODUZIDO</div><div class="day-stat-val" style="color:var(--sun)" id="t-pv">—</div></div>
+        <div class="day-stat"><div class="day-stat-lbl">🏠 CONSUMIDO</div><div class="day-stat-val" style="color:var(--load)" id="t-ld">—</div></div>
+        <div class="day-stat"><div class="day-stat-lbl">⬇️ DA REDE</div><div class="day-stat-val" style="color:var(--grid)" id="t-gr">—</div></div>
+        <div class="day-stat"><div class="day-stat-lbl">⬆️ EXPORTADO</div><div class="day-stat-val" style="color:var(--bat)" id="t-ex">—</div></div>
+        <div class="day-stat"><div class="day-stat-lbl">🔋 CARREGADO</div><div class="day-stat-val" style="color:var(--bat)" id="t-bc">—</div></div>
+        <div class="day-stat"><div class="day-stat-lbl">⚡ DESCARREG.</div><div class="day-stat-val" style="color:var(--euro)" id="t-bd">—</div></div>
+      </div>
+
+    </div><!-- /page-live -->
+
+    <!-- ═══ PAGE: FINANCEIRO ═══ -->
+    <div class="page" id="page-fin">
+      <div class="itabs">
+        <button class="itab on" id="itab-d" onclick="switchFin('d')">HOJE</button>
+        <button class="itab" id="itab-w" onclick="switchFin('w')">SEMANA</button>
+        <button class="itab" id="itab-m" onclick="switchFin('m')">MÊS</button>
+      </div>
+
+      <!-- HOJE -->
+      <div class="itp on" id="itp-d">
+        <div class="fin-card imp">
+          <div class="fin-header"><span class="fin-icon">⬇️</span><div><div class="fin-lbl">CONSUMO DA REDE</div></div></div>
+          <div class="fin-kwh" id="d-imp">— kWh</div>
+          <div class="fin-sub" id="d-imp-s">—</div>
+          <div class="fin-row"><span class="fin-row-lbl">CUSTO</span><span class="fin-row-val" id="d-imp-c">— €</span></div>
+        </div>
+        <div class="fin-card exp">
+          <div class="fin-header"><span class="fin-icon">⬆️</span><div><div class="fin-lbl">EXPORTADO REDE</div></div></div>
+          <div class="fin-kwh" id="d-exp">— kWh</div>
+          <div class="fin-sub">Tarifa UPAC</div>
+          <div class="fin-row"><span class="fin-row-lbl">RECEITA</span><span class="fin-row-val" id="d-exp-c">— €</span></div>
+        </div>
+        <div class="fin-card sav">
+          <div class="fin-header"><span class="fin-icon">💡</span><div><div class="fin-lbl">POUPANÇA AUTOCONSUMO</div></div></div>
+          <div class="fin-kwh" id="d-sav">— kWh</div>
+          <div class="fin-sub">Solar consumido localmente</div>
+          <div class="fin-row"><span class="fin-row-lbl">VALOR EVITADO</span><span class="fin-row-val" id="d-sav-c">— €</span></div>
+        </div>
+        <div class="fin-card bal">
+          <div class="fin-header"><span class="fin-icon">⚖️</span><div><div class="fin-lbl">SALDO DO DIA</div></div></div>
+          <div class="fin-kwh" id="d-bal">— €</div>
+          <div class="fin-sub">vs. sem sistema solar</div>
+          <div class="bal-rows">
+            <div class="bal-row"><span class="bal-row-lbl">Receita venda</span><span class="bal-row-val pos" id="d-b1">—</span></div>
+            <div class="bal-row"><span class="bal-row-lbl">Poupança auto.</span><span class="bal-row-val pos" id="d-b2">—</span></div>
+            <div class="bal-row"><span class="bal-row-lbl">Custo rede</span><span class="bal-row-val neg" id="d-b3">—</span></div>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-lbl">DISTRIBUIÇÃO ENERGÉTICA (kWh)</div>
+          <div class="chart-wrap"><canvas id="ch-pie"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-lbl">CUSTO vs POUPANÇA HORA A HORA (€)</div>
+          <div class="chart-wrap"><canvas id="ch-cost"></canvas></div>
+        </div>
+      </div>
+
+      <!-- SEMANA -->
+      <div class="itp" id="itp-w">
+        <div class="fin-card imp">
+          <div class="fin-header"><span class="fin-icon">⬇️</span><div><div class="fin-lbl">REDE (SEMANA)</div></div></div>
+          <div class="fin-kwh" id="w-imp">— kWh</div>
+          <div class="fin-sub" id="w-imp-s">—</div>
+          <div class="fin-row"><span class="fin-row-lbl">CUSTO</span><span class="fin-row-val" id="w-imp-c">— €</span></div>
+        </div>
+        <div class="fin-card exp">
+          <div class="fin-header"><span class="fin-icon">⬆️</span><div><div class="fin-lbl">EXPORTADO (SEMANA)</div></div></div>
+          <div class="fin-kwh" id="w-exp">— kWh</div>
+          <div class="fin-sub">UPAC acumulado</div>
+          <div class="fin-row"><span class="fin-row-lbl">RECEITA</span><span class="fin-row-val" id="w-exp-c">— €</span></div>
+        </div>
+        <div class="fin-card sav">
+          <div class="fin-header"><span class="fin-icon">💡</span><div><div class="fin-lbl">POUPANÇA (SEMANA)</div></div></div>
+          <div class="fin-kwh" id="w-sav">— kWh</div>
+          <div class="fin-sub">Autoconsumo acumulado</div>
+          <div class="fin-row"><span class="fin-row-lbl">VALOR EVITADO</span><span class="fin-row-val" id="w-sav-c">— €</span></div>
+        </div>
+        <div class="fin-card bal">
+          <div class="fin-header"><span class="fin-icon">⚖️</span><div><div class="fin-lbl">SALDO DA SEMANA</div></div></div>
+          <div class="fin-kwh" id="w-bal">— €</div>
+          <div class="fin-sub">vs. sem solar</div>
+          <div class="bal-rows">
+            <div class="bal-row"><span class="bal-row-lbl">Receita venda</span><span class="bal-row-val pos" id="w-b1">—</span></div>
+            <div class="bal-row"><span class="bal-row-lbl">Poupança auto.</span><span class="bal-row-val pos" id="w-b2">—</span></div>
+            <div class="bal-row"><span class="bal-row-lbl">Custo rede</span><span class="bal-row-val neg" id="w-b3">—</span></div>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-lbl">ENERGIA DIÁRIA DA SEMANA</div>
+          <div class="chart-wrap"><canvas id="ch-wbar"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-lbl">SALDO FINANCEIRO DIÁRIO (€)</div>
+          <div class="chart-wrap"><canvas id="ch-wbal"></canvas></div>
+        </div>
+      </div>
+
+      <!-- MÊS -->
+      <div class="itp" id="itp-m">
+        <div class="fin-card imp">
+          <div class="fin-header"><span class="fin-icon">⬇️</span><div><div class="fin-lbl">REDE (MÊS)</div></div></div>
+          <div class="fin-kwh" id="m-imp">— kWh</div>
+          <div class="fin-sub" id="m-imp-s">—</div>
+          <div class="fin-row"><span class="fin-row-lbl">CUSTO</span><span class="fin-row-val" id="m-imp-c">— €</span></div>
+        </div>
+        <div class="fin-card exp">
+          <div class="fin-header"><span class="fin-icon">⬆️</span><div><div class="fin-lbl">EXPORTADO (MÊS)</div></div></div>
+          <div class="fin-kwh" id="m-exp">— kWh</div>
+          <div class="fin-sub">UPAC acumulado</div>
+          <div class="fin-row"><span class="fin-row-lbl">RECEITA</span><span class="fin-row-val" id="m-exp-c">— €</span></div>
+        </div>
+        <div class="fin-card sav">
+          <div class="fin-header"><span class="fin-icon">💡</span><div><div class="fin-lbl">POUPANÇA (MÊS)</div></div></div>
+          <div class="fin-kwh" id="m-sav">— kWh</div>
+          <div class="fin-sub">Autoconsumo acumulado</div>
+          <div class="fin-row"><span class="fin-row-lbl">VALOR EVITADO</span><span class="fin-row-val" id="m-sav-c">— €</span></div>
+        </div>
+        <div class="fin-card bal">
+          <div class="fin-header"><span class="fin-icon">⚖️</span><div><div class="fin-lbl">SALDO DO MÊS</div></div></div>
+          <div class="fin-kwh" id="m-bal">— €</div>
+          <div class="fin-sub">vs. sem solar</div>
+          <div class="bal-rows">
+            <div class="bal-row"><span class="bal-row-lbl">Receita venda</span><span class="bal-row-val pos" id="m-b1">—</span></div>
+            <div class="bal-row"><span class="bal-row-lbl">Poupança auto.</span><span class="bal-row-val pos" id="m-b2">—</span></div>
+            <div class="bal-row"><span class="bal-row-lbl">Custo + potência</span><span class="bal-row-val neg" id="m-b3">—</span></div>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-lbl">ENERGIA DIÁRIA DO MÊS</div>
+          <div class="chart-wrap"><canvas id="ch-mbar"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-lbl">SALDO FINANCEIRO DIÁRIO (€)</div>
+          <div class="chart-wrap"><canvas id="ch-mbal"></canvas></div>
+        </div>
+      </div>
+
+    </div><!-- /page-fin -->
+
+    <!-- ═══ PAGE: TÉCNICO ═══ -->
+    <div class="page" id="page-tech">
+      <div class="tech-grid">
+        <div class="tech-stat">
+          <div class="tech-stat-lbl">☀️ SOL RESTANTE</div>
+          <div class="tech-stat-val" style="color:var(--sun)" id="sun-h">—</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted)">horas produção</div>
+          <div class="minibar"><div class="minibar-fill" id="sun-bar" style="background:linear-gradient(90deg,var(--sun),var(--sun2));width:0%"></div></div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);margin-top:4px">Pôr do sol: ~20:45</div>
+        </div>
+        <div class="tech-stat">
+          <div class="tech-stat-lbl">🔋 AUTONOMIA</div>
+          <div class="tech-stat-val" style="color:var(--bat)" id="auto-h">—</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted)">horas estimadas</div>
+          <div class="minibar"><div class="minibar-fill" id="auto-bar" style="background:linear-gradient(90deg,var(--bat),var(--accent));width:0%"></div></div>
+          <div id="auto-sub" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);margin-top:4px">com consumo actual</div>
+        </div>
+        <div class="tech-stat" style="grid-column:1/-1">
+          <div class="tech-stat-lbl">🌡️ TEMPERATURA INVERSOR</div>
+          <div class="tech-stat-val" style="color:var(--accent)" id="temp-big">—</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted)">inversor Deye · Normal &lt;65°C</div>
+          <div class="minibar" style="margin-top:8px"><div class="minibar-fill" id="temp-bar" style="background:linear-gradient(90deg,var(--accent),var(--sun));width:0%"></div></div>
+        </div>
+      </div>
+
+      <!-- Gráfico distribuição -->
+      <div class="chart-card">
+        <div class="chart-lbl">PRODUÇÃO — HOJE (kW, 30 em 30 min)</div>
+        <div class="chart-wrap"><canvas id="ch-line2"></canvas></div>
+      </div>
+
+      <!-- Alertas -->
+      <div class="card">
+        <div class="card-label">📡 ALERTAS E ESTADO</div>
+        <div id="alerts">
+          <div class="alert-item">
+            <div class="alert-icon info">⏳</div>
+            <div><div class="alert-t">A aguardar ligação API</div><div class="alert-s">A ligar ao Deye Cloud...</div></div>
+          </div>
+        </div>
+      </div>
+    </div><!-- /page-tech -->
+
+    <!-- ═══ PAGE: DEFINIÇÕES ═══ -->
+    <div class="page" id="page-settings">
+
+      <div class="settings-section">
+        <div class="settings-title">⚙ TARIFAS EDP (c/ IVA 23%)</div>
+        <div class="settings-card">
+          <div class="settings-row">
+            <div><div class="settings-row-lbl">Vazio (s/ IVA)</div><div class="settings-row-sub" id="s-off-disp">c/ IVA: —</div></div>
+            <input class="settings-input" id="s-off-net" type="number" value="0.1162" step="0.0001" oninput="updateTariffs()">
+          </div>
+          <div class="settings-row">
+            <div><div class="settings-row-lbl">Fora vazio (s/ IVA)</div><div class="settings-row-sub" id="s-peak-disp">c/ IVA: —</div></div>
+            <input class="settings-input" id="s-peak-net" type="number" value="0.1978" step="0.0001" oninput="updateTariffs()">
+          </div>
+          <div class="settings-row">
+            <div><div class="settings-row-lbl">Venda UPAC</div><div class="settings-row-sub">€/kWh</div></div>
+            <input class="settings-input" id="s-sell" type="number" value="0.0650" step="0.001">
+          </div>
+          <div class="settings-row">
+            <div><div class="settings-row-lbl">Potência contratada</div><div class="settings-row-sub">13.80 kW · 40.21 €/mês</div></div>
+            <input class="settings-input" id="s-pot" type="number" value="40.21" step="0.10">
+          </div>
+        </div>
+        <button class="settings-btn update" onclick="saveTariffs()">↻ ACTUALIZAR TARIFAS</button>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-title">🔑 DEYE CLOUD API</div>
+        <div class="settings-card">
+          <div class="settings-row">
+            <div><div class="settings-row-lbl">Estado</div><div class="settings-row-sub" id="s-api-status">A verificar...</div></div>
+            <div style="font-size:20px" id="s-api-icon">⏳</div>
+          </div>
+          <div class="settings-row">
+            <div><div class="settings-row-lbl">Email</div><div class="settings-row-sub" id="s-email-disp">—</div></div>
+          </div>
+          <div class="settings-row">
+            <div><div class="settings-row-lbl">Token</div><div class="settings-row-sub" id="s-token-exp">—</div></div>
+          </div>
+        </div>
+        <button class="settings-btn" onclick="openApiModal()">⚡ CONFIGURAR API</button>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-title">🔒 SEGURANÇA</div>
+        <div class="settings-card">
+          <div class="settings-row">
+            <div><div class="settings-row-lbl">Password actual</div><div class="settings-row-sub">Familiar</div></div>
+          </div>
+        </div>
+        <button class="settings-btn" onclick="openChangePwd()">🔑 MUDAR PASSWORD</button>
+        <button class="settings-btn danger" onclick="doLogout()">🚪 SAIR</button>
+      </div>
+
+    </div><!-- /page-settings -->
+
+  </div><!-- /pages -->
+
+  <!-- BOTTOM NAV -->
+  <nav class="nav">
+    <button class="nav-btn active" id="nav-live" onclick="navTo('live')">
+      <span class="nav-icon">⚡</span>LIVE
+    </button>
+    <button class="nav-btn" id="nav-fin" onclick="navTo('fin')">
+      <span class="nav-icon">💶</span>FINANÇAS
+    </button>
+    <button class="nav-btn" id="nav-tech" onclick="navTo('tech')">
+      <span class="nav-icon">📡</span>TÉCNICO
+    </button>
+    <button class="nav-btn" id="nav-settings" onclick="navTo('settings')">
+      <span class="nav-icon">⚙️</span>CONFIG
+    </button>
+  </nav>
+
+</div><!-- /app -->
+
+<!-- MODAL API -->
+<div id="api-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:9998;
+  align-items:flex-end;justify-content:center;backdrop-filter:blur(8px)">
+  <div style="background:#1A2236;border:1px solid rgba(78,205,196,.3);border-radius:24px 24px 0 0;
+    padding:28px 20px;width:100%;max-width:480px;max-height:92vh;overflow-y:auto;
+    padding-bottom:calc(28px + env(safe-area-inset-bottom,0px))">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-size:17px;font-weight:800">🔌 API Deye Cloud</div>
+      <button onclick="closeApiModal()" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);
+        color:#E8EDF5;width:32px;height:32px;border-radius:10px;cursor:pointer;font-size:15px">✕</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div><div style="font-size:9px;color:#5A6785;font-family:'JetBrains Mono',monospace;letter-spacing:2px;margin-bottom:4px">EMAIL</div>
+        <input id="m-email" style="background:#0A0E1A;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:12px 14px;color:#E8EDF5;font-family:'JetBrains Mono',monospace;font-size:13px;outline:none;width:100%">
+      </div>
+      <div><div style="font-size:9px;color:#5A6785;font-family:'JetBrains Mono',monospace;letter-spacing:2px;margin-bottom:4px">PASSWORD DEYE</div>
+        <input id="m-pwd" type="password" placeholder="Password da Deye Cloud" style="background:#0A0E1A;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:12px 14px;color:#E8EDF5;font-family:'JetBrains Mono',monospace;font-size:13px;outline:none;width:100%">
+        <div style="font-size:9px;color:#5A6785;font-family:'JetBrains Mono',monospace;margin-top:4px">🔒 Convertida em SHA256 no browser</div>
+      </div>
+    </div>
+    <div id="m-status" style="margin-top:12px;font-family:'JetBrains Mono',monospace;font-size:11px;min-height:16px;color:#4ECDC4;word-break:break-all;line-height:1.5"></div>
+    <button onclick="doConnect()" style="margin-top:16px;width:100%;background:linear-gradient(135deg,rgba(78,205,196,.25),rgba(78,205,196,.05));border:1px solid rgba(78,205,196,.5);color:#4ECDC4;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;padding:13px;border-radius:12px;cursor:pointer;letter-spacing:2px">⚡ LIGAR</button>
+  </div>
+</div>
+
+<!-- MODAL CHANGE PWD -->
+<div id="pwd-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:9998;
+  align-items:flex-end;justify-content:center;backdrop-filter:blur(8px)">
+  <div style="background:#1A2236;border:1px solid rgba(255,209,102,.3);border-radius:24px 24px 0 0;
+    padding:28px 20px;width:100%;max-width:480px;
+    padding-bottom:calc(28px + env(safe-area-inset-bottom,0px))">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-size:17px;font-weight:800">🔑 Mudar Password</div>
+      <button onclick="closePwdModal()" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:#E8EDF5;width:32px;height:32px;border-radius:10px;cursor:pointer;font-size:15px">✕</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <input id="pwd-old" type="password" placeholder="Password actual" style="background:#0A0E1A;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:12px 14px;color:#E8EDF5;font-family:'JetBrains Mono',monospace;font-size:15px;outline:none;width:100%;letter-spacing:2px">
+      <input id="pwd-new1" type="password" placeholder="Nova password" style="background:#0A0E1A;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:12px 14px;color:#E8EDF5;font-family:'JetBrains Mono',monospace;font-size:15px;outline:none;width:100%;letter-spacing:2px">
+      <input id="pwd-new2" type="password" placeholder="Repetir nova password" style="background:#0A0E1A;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:12px 14px;color:#E8EDF5;font-family:'JetBrains Mono',monospace;font-size:15px;outline:none;width:100%;letter-spacing:2px">
+    </div>
+    <div id="pwd-err" style="margin-top:10px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#FF6B6B;min-height:16px"></div>
+    <button onclick="doChangePwd()" style="margin-top:14px;width:100%;background:linear-gradient(135deg,rgba(255,209,102,.2),rgba(255,209,102,.05));border:1px solid rgba(255,209,102,.5);color:#FFD166;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;padding:13px;border-radius:12px;cursor:pointer">GUARDAR NOVA PASSWORD</button>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════
+const CFG = {
+  appId:  '202605214003010',
+  secret: 'fda694b18c04151a4443e8fde8b48033',
+  baseUrl:'https://eu1-developer.deyecloud.com',
+  proxy:  'https://lingering-darkness-583a.nuno-jorge-torres.workers.dev',
+  devSn:  '2509094105',
+  logSn:  '3584353340',
+  defaultPwd: 'solar2024', // ← PASSWORD PADRÃO — muda aqui ou nas definições
+};
+
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+let token = localStorage.getItem('dy_token') || '';
+let tokenExp = parseInt(localStorage.getItem('dy_token_exp') || '0');
+let liveTimer = null;
+
+// ═══════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════
+const $ = id => document.getElementById(id);
+const st = (id, v) => { const e=$(id); if(e) e.textContent=v; };
+const T = () => ({
+  off:  parseFloat(localStorage.getItem('t_off'))  || 0.1429,
+  peak: parseFloat(localStorage.getItem('t_peak')) || 0.2433,
+  sell: parseFloat(localStorage.getItem('t_sell')) || 0.0650,
+  pot:  parseFloat(localStorage.getItem('t_pot'))  || 40.21,
+});
+function num(v){ return (v!==null&&v!==undefined&&!isNaN(parseFloat(v)))?parseFloat(v):null; }
+
+async function sha256(s){
+  const b = await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// LOCK SCREEN
+// ═══════════════════════════════════════════════════════
+const LOCK_KEY = 'solar_pwd_hash';
+
+async function initLock(){
+  const stored = localStorage.getItem(LOCK_KEY);
+  if(!stored){
+    // Primeira vez — guardar password padrão
+    const h = await sha256(CFG.defaultPwd);
+    localStorage.setItem(LOCK_KEY, h);
+    $('lock-hint').textContent = 'Password padrão: ' + CFG.defaultPwd;
+  }
+  $('lock-pwd').addEventListener('keydown', e => { if(e.key==='Enter') tryUnlock(); });
+  $('lock-btn').onclick = tryUnlock;
+}
+
+async function tryUnlock(){
+  const pwd = $('lock-pwd').value;
+  if(!pwd){ $('lock-err').textContent='Introduz a password'; return; }
+  const h = await sha256(pwd);
+  const stored = localStorage.getItem(LOCK_KEY);
+  if(h === stored){
+    $('lock').style.display='none';
+    $('app').style.display='flex';
+    initApp();
+  } else {
+    $('lock-err').textContent='Password incorrecta';
+    $('lock-pwd').value='';
+    $('lock-pwd').focus();
+    $('lock-pwd').style.borderColor='rgba(255,107,107,.6)';
+    setTimeout(()=>{ $('lock-pwd').style.borderColor=''; $('lock-err').textContent=''; },2000);
+  }
+}
+
+function doLogout(){
+  $('app').style.display='none';
+  $('lock').style.display='flex';
+  $('lock-pwd').value='';
+  $('lock-err').textContent='';
+  if(liveTimer){ clearInterval(liveTimer); liveTimer=null; }
+}
+
+function openChangePwd(){ $('pwd-modal').style.display='flex'; }
+function closePwdModal(){ $('pwd-modal').style.display='none'; }
+
+async function doChangePwd(){
+  const old=$('pwd-old').value, n1=$('pwd-new1').value, n2=$('pwd-new2').value;
+  if(!old||!n1||!n2){ $('pwd-err').textContent='Preenche todos os campos'; return; }
+  if(n1!==n2){ $('pwd-err').textContent='As passwords novas não coincidem'; return; }
+  if(n1.length < 4){ $('pwd-err').textContent='Mínimo 4 caracteres'; return; }
+  const oldH = await sha256(old);
+  if(oldH !== localStorage.getItem(LOCK_KEY)){ $('pwd-err').textContent='Password actual incorrecta'; return; }
+  const newH = await sha256(n1);
+  localStorage.setItem(LOCK_KEY, newH);
+  closePwdModal();
+  alert('✅ Password alterada com sucesso!');
+}
+
+// ═══════════════════════════════════════════════════════
+// CLOCK
+// ═══════════════════════════════════════════════════════
+function tick(){
+  const n=new Date();
+  st('clk', n.toLocaleTimeString('pt-PT'));
+  st('dstr', n.toLocaleDateString('pt-PT',{weekday:'short',day:'2-digit',month:'short'}));
+}
+setInterval(tick,1000); tick();
+
+// ═══════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════
+function navTo(id){
+  ['live','fin','tech','settings'].forEach(p=>{
+    $('page-'+p).classList.toggle('active', p===id);
+    $('nav-'+p).classList.toggle('active', p===id);
+  });
+  if(id==='fin') { buildFinCharts(); }
+}
+
+function switchFin(id){
+  ['d','w','m'].forEach(t=>{
+    $('itab-'+t).className='itab'+(t===id?' on':'');
+    $('itp-'+t).className='itp'+(t===id?' on':'');
+  });
+  if(id==='w') buildWeekCharts();
+  if(id==='m') buildMonthCharts();
+}
+
+// ═══════════════════════════════════════════════════════
+// TARIFAS
+// ═══════════════════════════════════════════════════════
+function updateTariffs(){
+  const IVA=1.23;
+  const offNet  = parseFloat($('s-off-net').value)  || 0.1162;
+  const peakNet = parseFloat($('s-peak-net').value) || 0.1978;
+  const offIva  = +(offNet*IVA).toFixed(4);
+  const peakIva = +(peakNet*IVA).toFixed(4);
+  st('s-off-disp',  'c/ IVA: '+offIva.toFixed(4)+' €/kWh');
+  st('s-peak-disp', 'c/ IVA: '+peakIva.toFixed(4)+' €/kWh');
+}
+
+function saveTariffs(){
+  const IVA=1.23;
+  const offNet  = parseFloat($('s-off-net').value)  || 0.1162;
+  const peakNet = parseFloat($('s-peak-net').value) || 0.1978;
+  localStorage.setItem('t_off',  (offNet*IVA).toFixed(4));
+  localStorage.setItem('t_peak', (peakNet*IVA).toFixed(4));
+  localStorage.setItem('t_sell', $('s-sell').value);
+  localStorage.setItem('t_pot',  $('s-pot').value);
+  updateTariffs();
+  recalc();
+  const b=$('s-pot').parentElement.parentElement.nextElementSibling;
+  const btn = document.querySelector('.settings-btn.update');
+  btn.textContent='✅ GUARDADO!';
+  setTimeout(()=>{ btn.textContent='↻ ACTUALIZAR TARIFAS'; },2000);
+}
+
+function loadTariffInputs(){
+  const IVA=1.23;
+  const offIva  = parseFloat(localStorage.getItem('t_off'))  || 0.1429;
+  const peakIva = parseFloat(localStorage.getItem('t_peak')) || 0.2433;
+  $('s-off-net').value  = (offIva/IVA).toFixed(4);
+  $('s-peak-net').value = (peakIva/IVA).toFixed(4);
+  $('s-sell').value     = localStorage.getItem('t_sell') || '0.0650';
+  $('s-pot').value      = localStorage.getItem('t_pot')  || '40.21';
+  updateTariffs();
+}
+
+// ═══════════════════════════════════════════════════════
+// API MODAL
+// ═══════════════════════════════════════════════════════
+function openApiModal(){
+  $('api-modal').style.display='flex';
+  $('m-email').value = localStorage.getItem('dy_email')||'';
+  $('m-pwd').value='';
+  $('m-status').textContent='';
+}
+function closeApiModal(){ $('api-modal').style.display='none'; }
+function mstat(msg,c){ $('m-status').textContent=msg; $('m-status').style.color=c==='ok'?'#A8E063':c==='err'?'#FF6B6B':'#4ECDC4'; }
+
+async function doConnect(){
+  const em=$('m-email').value.trim(), pw=$('m-pwd').value;
+  if(!em||!pw){ mstat('⚠️ Preenche email e password','err'); return; }
+  mstat('🔄 A encriptar...','info');
+  const hash=await sha256(pw);
+  localStorage.setItem('dy_email',em);
+  localStorage.setItem('dy_pwdHash',hash);
+  mstat('🔄 A autenticar...','info');
+  const ok=await getToken(CFG.appId,CFG.secret,em,hash);
+  if(ok){ closeApiModal(); fetchAll(); updateApiStatus(); }
+}
+
+// ═══════════════════════════════════════════════════════
+// TOKEN
+// ═══════════════════════════════════════════════════════
+async function getToken(appId,secret,email,pwdHash){
+  try{
+    const url=CFG.proxy+'?target='+encodeURIComponent(CFG.baseUrl+'/v1.0/account/token?appId='+appId);
+    const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({appSecret:secret,email,password:pwdHash})});
+    const d=await r.json();
+    const data=d.data||d;
+    const tok=data.accessToken||data.access_token||d.accessToken;
+    const exp=data.expiresIn||data.expires_in||5183999;
+    if(tok){
+      token=tok; tokenExp=Date.now()+(exp*1000);
+      localStorage.setItem('dy_token',token);
+      localStorage.setItem('dy_token_exp',String(tokenExp));
+      const uid=data.uid||d.uid;
+      if(uid) localStorage.setItem('dy_uid',String(uid));
+      mstat('✅ Ligado!','ok');
+      return true;
+    }
+    mstat('❌ '+(d.msg||d.error||JSON.stringify(d)),'err');
+    return false;
+  }catch(e){ mstat('❌ '+e.message,'err'); return false; }
+}
+
+async function ensureToken(){
+  if(token && Date.now()<tokenExp-60000) return true;
+  const em=localStorage.getItem('dy_email')||'';
+  const hash=localStorage.getItem('dy_pwdHash')||'';
+  if(!em||!hash) return false;
+  return getToken(CFG.appId,CFG.secret,em,hash);
+}
+
+function updateApiStatus(){
+  const em=localStorage.getItem('dy_email')||'—';
+  st('s-email-disp',em);
+  if(token && Date.now()<tokenExp){
+    st('s-api-status','Ligado ✅');
+    st('s-api-icon','✅');
+    const mins=Math.round((tokenExp-Date.now())/60000);
+    st('s-token-exp','Expira em '+mins+'min');
+  } else {
+    st('s-api-status','Sem token — configura API');
+    st('s-api-icon','❌');
+    st('s-token-exp','—');
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// ACUMULADOR LOCAL
+// ═══════════════════════════════════════════════════════
+const _acc={pv:0,ld:0,gr:0,ex:0,bc:0,bd:0,lastTs:null,day:null};
+
+function _accLoad(){
+  try{
+    const s=localStorage.getItem('dy_acc'); if(!s) return;
+    const d=JSON.parse(s);
+    const today=new Date().toDateString();
+    if(d.day!==today){ localStorage.removeItem('dy_acc'); return; }
+    Object.assign(_acc,d);
+  }catch(e){}
+}
+function _accSave(){
+  localStorage.setItem('dy_acc',JSON.stringify({..._acc}));
+}
+_accLoad();
+
+function accumulateEnergy(pvW,loadW,wireW,batW){
+  const now=Date.now(), today=new Date().toDateString();
+  if(_acc.day!==today){ Object.assign(_acc,{pv:0,ld:0,gr:0,ex:0,bc:0,bd:0,day:today,lastTs:now}); _accSave(); return; }
+  if(!_acc.lastTs){ _acc.lastTs=now; _accSave(); return; }
+  const dt=(now-_acc.lastTs)/3600000;
+  if(dt>0&&dt<0.083){
+    if(pvW>10)   _acc.pv+=(pvW/1000)*dt;
+    if(loadW>10) _acc.ld+=(loadW/1000)*dt;
+    if(wireW<-50)_acc.ex+=(Math.abs(wireW)/1000)*dt;
+    if(wireW>50) _acc.gr+=(wireW/1000)*dt;
+    if(batW>50)  _acc.bc+=(batW/1000)*dt;
+    if(batW<-50) _acc.bd+=(Math.abs(batW)/1000)*dt;
+  }
+  _acc.lastTs=now;
+  _acc._sc=(_acc._sc||0)+1;
+  if(_acc._sc>=5){ _accSave(); _acc._sc=0; }
+}
+
+// ═══════════════════════════════════════════════════════
+// FETCH
+// ═══════════════════════════════════════════════════════
+// fetch com timeout para evitar hang no Safari
+async function fetchWithTimeout(url, opts={}, ms=8000){
+  const ctrl=new AbortController();
+  const tid=setTimeout(()=>ctrl.abort(),ms);
+  try{
+    const r=await fetch(url,{...opts,signal:ctrl.signal});
+    clearTimeout(tid);
+    return r;
+  }catch(e){ clearTimeout(tid); throw e; }
+}
+
+async function fetchAll(){
+  // ── WORKER KV ──
+  try{
+    const r=await fetchWithTimeout(CFG.proxy+'/data',{},8000);
+    if(r.ok){
+      const d=await r.json();
+      if(d.ok&&d.data){
+        const acc=d.data;
+        if(acc.pv>0.001||acc.ld>0.001||acc.ex>0.001){
+          renderDay(acc.pv,acc.ld,acc.gr,acc.ex);
+          window._todayData={pv:acc.pv,ld:acc.ld,gr:acc.gr,ex:acc.ex};
+          st('t-bc',acc.bc.toFixed(1)+' kWh');
+          st('t-bd',acc.bd.toFixed(1)+' kWh');
+        }
+        if(acc.live&&acc.live.pvW!==null){
+          const lv=acc.live;
+          const age=Math.round((Date.now()-lv.ts)/1000);
+          render('w',lv.pvW,lv.ldW,lv.wire,lv.bat,lv.batP,lv.temp);
+          setStatus(age>180?'warn':'ok', age>180?'ANTIGO ('+age+'s)':'ON-GRID · DADOS REAIS');
+          st('updated-ts','Act.: '+new Date().toLocaleTimeString('pt-PT'));
+          return;
+        }
+      }
+    }
+  }catch(e){
+    console.warn('[DY] Worker error:',e.message||e);
+    // Só mostrar erro de rede se não tiver dados anteriores
+    if(!window._todayData) setStatus('err','SEM REDE — A TENTAR API...');
+  }
+
+  // ── FALLBACK: API directa ──
+  if(!await ensureToken()){
+    setStatus('err','SEM CREDENCIAIS — Vai a CONFIG');
+    return;
+  }
+  const appId=localStorage.getItem('dy_appId')||CFG.appId;
+  let sid=localStorage.getItem('dy_stationId')||'';
+  if(!sid){
+    try{
+      const r2=await fetchWithTimeout(
+        CFG.proxy+'?target='+encodeURIComponent(CFG.baseUrl+'/v1.0/station/list?appId='+appId),
+        {method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:'{}'}
+      );
+      const d2=await r2.json();
+      const raw=d2.data?.stationList||d2.stationList||d2.data||[];
+      const arr=Array.isArray(raw)?raw:[];
+      if(arr.length>0){ sid=String(arr[0].id||arr[0].stationId||''); if(sid) localStorage.setItem('dy_stationId',sid); }
+    }catch(e){ console.warn('[DY] station/list err:',e.message); }
+  }
+  if(sid){
+    try{
+      const r3=await fetchWithTimeout(
+        CFG.proxy+'?target='+encodeURIComponent(CFG.baseUrl+'/v1.0/station/latest?appId='+appId),
+        {method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({stationId:sid})}
+      );
+      const d3=await r3.json();
+      if(d3&&(d3.code==='1000000'||d3.success!==false)) applyStation(d3);
+    }catch(e){ console.warn('[DY] station/latest err:',e.message); }
+  }
+  if(!window._todayData&&_acc.pv>0.001){
+    renderDay(+_acc.pv.toFixed(2),+_acc.ld.toFixed(2),+_acc.gr.toFixed(2),+_acc.ex.toFixed(2));
+  }
+  st('updated-ts','Act.: '+new Date().toLocaleTimeString('pt-PT'));
+}
+
+function applyStation(resp){
+  const d=(resp.data&&typeof resp.data==='object'&&!Array.isArray(resp.data))?resp.data:resp;
+  const pv=num(d.generationPower||d.pvPower||d.pac);
+  const load=num(d.consumptionPower||d.loadPower||d.usePower);
+  const wire=num(d.wirePower||d.gridPower||d.purchasedPower);
+  const bat=num(d.batterySOC||d.batterySoc||d.soc);
+  const batP=num(d.chargePower)??num(d.batteryPower)??null;
+  const temp=num(d.inverterTemperature||d.temperature);
+  const volt=num(d.gridVoltage||d.voltage);
+  if(volt!==null) st('m-volt',volt.toFixed(1)+' V');
+  const todPv=num(d.generationValue)??num(d.pvValue)??num(d.dailyGeneration);
+  const todLd=num(d.consumptionValue)??num(d.useValue);
+  const todGr=num(d.buyValue)??num(d.purchaseValue);
+  const todEx=num(d.sellValue)??num(d.wireValue);
+  render('st',pv,load,wire,bat,batP,temp);
+  if(todPv!==null&&todPv>0){
+    renderDay(todPv,todLd,todGr,todEx);
+    window._todayData={pv:todPv||0,ld:todLd||0,gr:todGr||0,ex:todEx||0};
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════
+function render(src,pv,load,grid,bat,batP,temp){
+  if(pv!==null){
+    st('f-pv', Math.round(pv).toLocaleString('pt')+' W');
+    st('m-pv', (pv/1000).toFixed(2));
+    st('m-pv-s', (pv/12000*100).toFixed(0)+'% capacidade');
+  }
+  if(bat!==null){
+    st('f-bat', bat.toFixed(0)+'%');
+    st('m-bat', bat.toFixed(0));
+    $('m-batbar').style.width=bat+'%';
+  }
+  if(grid!==null){
+    st('f-grid', Math.round(Math.abs(grid)).toLocaleString('pt')+' W');
+    st('m-grid', (Math.abs(grid)/1000).toFixed(2));
+    const gs=grid<-50?'<span style="color:var(--bat)">kW · A exportar ↑</span>':grid>50?'<span style="color:var(--red)">kW · A importar ↓</span>':'<span style="color:var(--bat)">kW · Independente</span>';
+    $('m-grid-s').innerHTML=gs;
+  }
+  if(load!==null){
+    st('f-load', Math.round(load).toLocaleString('pt')+' W');
+    st('m-load', (load/1000).toFixed(2));
+  }
+  if(temp!==null){
+    st('f-temp', temp.toFixed(1)+'°C');
+    st('temp-big', temp.toFixed(1)+'°C');
+    st('m-temp', temp.toFixed(1)+'°C inversor');
+    $('temp-bar').style.width=Math.min(100,(temp/100)*100)+'%';
+  }
+  if(batP!==null){
+    st('m-bat-s', batP>50?`% · +${(batP/1000).toFixed(1)} kW`:batP<-50?`% · -${(Math.abs(batP)/1000).toFixed(1)} kW`:'% · Standby');
+  }
+
+  const h=new Date().getHours()+new Date().getMinutes()/60;
+  const rem=Math.max(0,20.75-h);
+  st('sun-h',rem>0?rem.toFixed(1)+'h':'0h');
+  $('sun-bar').style.width=Math.max(0,Math.min(100,(rem/14.25)*100))+'%';
+
+  if(bat!==null&&load!==null&&load>0){
+    const usable=(bat/100)*15.92*0.85;
+    const night=Math.max(0.5,(load/1000)*0.6);
+    st('auto-h',(usable/night).toFixed(1)+'h');
+    $('auto-bar').style.width=Math.min(100,((usable/night)/24)*100)+'%';
+    st('auto-sub','Cap: '+usable.toFixed(1)+' kWh · Noite: '+night.toFixed(1)+' kW');
+  }
+
+  if(pv!==null&&load!==null&&grid!==null) accumulateEnergy(pv,load,grid,batP||0);
+  if(_acc.bc>0.001) st('t-bc',_acc.bc.toFixed(1)+' kWh'); else st('t-bc','0.0 kWh');
+  if(_acc.bd>0.001) st('t-bd',_acc.bd.toFixed(1)+' kWh'); else st('t-bd','0.0 kWh');
+
+  updateLiveChart(pv,load,batP,grid);
+
+  const alerts=[];
+  if(pv>100) alerts.push({c:'ok',i:'✅',t:'Inversor Deye operacional',s:new Date().toLocaleTimeString('pt-PT')+(temp?' · '+temp.toFixed(1)+'°C':'')});
+  if(bat!==null) alerts.push({c:'ok',i:batP>50?'🔋':'⚡',t:batP>50?'Bateria em carga':'Bateria estável',s:new Date().toLocaleTimeString('pt-PT')+' · '+bat.toFixed(0)+'%'});
+  alerts.push({c:'info',i:'📡',t:'Deye Cloud activa',s:new Date().toLocaleTimeString('pt-PT')});
+  if(temp>60) alerts.push({c:'warn',i:'⚠️',t:'Temperatura elevada',s:temp.toFixed(1)+'°C'});
+  $('alerts').innerHTML=alerts.slice(0,4).map(a=>`<div class="alert-item"><div class="alert-icon ${a.c}">${a.i}</div><div><div class="alert-t">${a.t}</div><div class="alert-s">${a.s}</div></div></div>`).join('');
+
+  setStatus('ok','ON-GRID · DADOS REAIS');
+}
+
+function renderDay(pv,ld,gr,ex){
+  if(pv!==null) st('t-pv',pv.toFixed(1)+' kWh');
+  if(ld!==null) st('t-ld',ld.toFixed(1)+' kWh');
+  if(gr!==null) st('t-gr',gr.toFixed(1)+' kWh');
+  if(ex!==null) st('t-ex',ex.toFixed(1)+' kWh');
+  recalcDay(pv||0,ld||0,gr||0,ex||0);
+  updateDayCharts(pv||0,ld||0,gr||0,ex||0);
+}
+
+function setStatus(type,txt){
+  const p=$('status-pill');
+  p.className='pill '+type;
+  st('status-txt',txt);
+}
+
+function recalc(){
+  const d=window._todayData;
+  if(d&&(d.pv>0||d.gr>0)) recalcDay(d.pv,d.ld,d.gr,d.ex);
+}
+
+function recalcDay(pv,ld,gr,ex){
+  const t=T();
+  const self=Math.max(0,pv-ex);
+  const pk=gr*0.55, off=gr*0.45;
+  const cost=-(pk*t.peak+off*t.off);
+  const rev=ex*t.sell;
+  const sav=self*t.peak;
+  const bal=rev+sav+cost;
+  const f=(v,p='')=>p+v.toFixed(2)+' €';
+  const k=v=>v.toFixed(1)+' kWh';
+  st('d-imp',k(gr));  st('d-imp-s','Ponta: '+pk.toFixed(2)+' · Vazio: '+off.toFixed(2)+' kWh');
+  st('d-imp-c',f(cost)); st('d-exp',k(ex)); st('d-exp-c',f(rev,'+'));
+  st('d-sav',k(self)); st('d-sav-c',f(sav,'+'));
+  st('d-bal',(bal>=0?'+':'')+bal.toFixed(2)+' €');
+  st('d-b1',f(rev,'+')); st('d-b2',f(sav,'+')); st('d-b3',f(cost));
+}
+
+// ═══════════════════════════════════════════════════════
+// CHARTS
+// ═══════════════════════════════════════════════════════
+const CD={col:'#5A6785',font:{family:'JetBrains Mono',size:9},grid:'rgba(255,255,255,0.04)'};
+const liveData={lb:[],pv:[],ld:[],bat:[],gr:[]};
+let lineChart=null, lineChart2=null;
+
+const cjs=document.createElement('script');
+cjs.src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
+cjs.onload=buildAllCharts;
+document.head.appendChild(cjs);
+
+function buildAllCharts(){
+  buildLiveChart();
+  buildFinCharts();
+}
+
+function buildLiveChart(){
+  // Dados simulados de 30 em 30 min desde as 6:00
+  const now=new Date(), lb=[],pv=[],ld=[],bat=[],gr=[];
+  for(let h=6;h<=21;h++){
+    for(let s=0;s<2;s++){
+      const m=s*30;
+      if(h>now.getHours()||(h===now.getHours()&&m>now.getMinutes())) break;
+      const lbl=h+':'+(m===0?'00':'30');
+      const hd=h+m/60;
+      const sf=Math.max(0,Math.sin(Math.PI*(hd-6)/15));
+      const p=+(9.1*sf*(0.85+Math.random()*0.15)).toFixed(2);
+      const l=+(0.4+Math.random()*0.4).toFixed(2);
+      const b=+(p>l?-(p-l)*0.4:0).toFixed(2);
+      lb.push(lbl); pv.push(p); ld.push(l); bat.push(b);
+      gr.push(+(Math.max(0,l-p-Math.abs(b))*(Math.random()<0.1?1:0)).toFixed(2));
+    }
+  }
+  Object.assign(liveData,{lb:[...lb],pv:[...pv],ld:[...ld],bat:[...bat],gr:[...gr]});
+
+  const ds=[
+    {label:'Solar kW',data:pv,borderColor:'#F5A623',backgroundColor:'rgba(245,166,35,0.08)',fill:true,tension:0.4,pointRadius:1.5,borderWidth:2},
+    {label:'Consumo kW',data:ld,borderColor:'#C471ED',backgroundColor:'rgba(196,113,237,0.05)',fill:true,tension:0.4,pointRadius:1.5,borderWidth:1.5},
+    {label:'Bateria kW',data:bat,borderColor:'#A8E063',fill:false,tension:0.4,pointRadius:1,borderWidth:1.5,borderDash:[4,2]},
+    {label:'Rede kW',data:gr,borderColor:'#4ECDC4',fill:false,tension:0.4,pointRadius:1,borderWidth:1.5,borderDash:[5,3]}
+  ];
+  const opts={responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{labels:{color:CD.col,font:CD.font,boxWidth:8,padding:6}}},
+    scales:{
+      x:{ticks:{color:CD.col,font:CD.font,maxRotation:0,autoSkip:true,maxTicksLimit:8},grid:{color:CD.grid}},
+      y:{min:0,max:12,ticks:{color:CD.col,font:CD.font,stepSize:2,callback:v=>v+'kW'},grid:{color:CD.grid}}
+    }};
+  lineChart=new Chart($('ch-line'),{type:'line',data:{labels:lb,datasets:ds},options:opts});
+  // Clone para página técnica
+  lineChart2=new Chart($('ch-line2'),{type:'line',data:{labels:[...lb],datasets:ds.map(d=>({...d,data:[...d.data]}))},options:{...opts,plugins:{legend:{display:false}}}});
+}
+
+function updateLiveChart(pvW,loadW,batPW,gridW){
+  if(!lineChart) return;
+  const now=new Date(), h=now.getHours(), m=now.getMinutes();
+  const lbl=h+':'+(m<30?'00':'30');
+  const last=liveData.lb[liveData.lb.length-1];
+  if(lbl===last){
+    const i=liveData.lb.length-1;
+    if(pvW!==null)  liveData.pv[i]=+(Math.min(12,pvW/1000)).toFixed(2);
+    if(loadW!==null)liveData.ld[i]=+(Math.min(12,loadW/1000)).toFixed(2);
+    if(batPW!==null)liveData.bat[i]=+(batPW/1000).toFixed(2);
+    if(gridW!==null)liveData.gr[i]=+(Math.abs(gridW)/1000).toFixed(2);
+  } else {
+    if(liveData.lb.length>=48){ ['lb','pv','ld','bat','gr'].forEach(k=>liveData[k].shift()); }
+    liveData.lb.push(lbl);
+    liveData.pv.push(pvW!==null?+(Math.min(12,pvW/1000)).toFixed(2):null);
+    liveData.ld.push(loadW!==null?+(Math.min(12,loadW/1000)).toFixed(2):null);
+    liveData.bat.push(batPW!==null?+(batPW/1000).toFixed(2):null);
+    liveData.gr.push(gridW!==null?+(Math.abs(gridW)/1000).toFixed(2):null);
+  }
+  [lineChart,lineChart2].forEach(c=>{ if(!c) return;
+    c.data.labels=liveData.lb;
+    c.data.datasets[0].data=liveData.pv;
+    c.data.datasets[1].data=liveData.ld;
+    c.data.datasets[2].data=liveData.bat;
+    c.data.datasets[3].data=liveData.gr;
+    c.update('none');
+  });
+}
+
+let _finBuilt=false;
+function buildFinCharts(){
+  if(!window.Chart||_finBuilt) return;
+  _finBuilt=true;
+
+  // PIE
+  window._pieChart=new Chart($('ch-pie'),{type:'doughnut',
+    data:{labels:['Autoconsumo','Exportado','Da Rede'],
+      datasets:[{data:[60,25,15],backgroundColor:['rgba(255,209,102,.8)','rgba(168,224,99,.8)','rgba(255,107,107,.7)'],borderColor:'rgba(255,255,255,.05)',borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'62%',
+      plugins:{legend:{position:'right',labels:{color:CD.col,font:CD.font,boxWidth:8,padding:6}}}}});
+
+  // COST
+  const t=T(),hl=[],cb=[],sb=[];
+  const nowH=new Date().getHours();
+  let sfSum=0; for(let h=6;h<=20;h++) sfSum+=Math.max(0,Math.sin(Math.PI*(h-6)/14));
+  for(let h=6;h<=20;h++){
+    hl.push(h+':00');
+    const pk=(h>=9&&h<=12)||(h>=18&&h<=21);
+    const tr=pk?t.peak:t.off;
+    const sf=Math.max(0,Math.sin(Math.PI*(h-6)/14));
+    const frac=sfSum>0?sf/sfSum:0;
+    if(h>nowH){cb.push(null);sb.push(null);continue;}
+    const p=10*frac,l=1.5*frac;
+    const g=Math.max(0,l-p);
+    const self2=Math.min(p,l);
+    cb.push(g>0?+( -(g*tr)).toFixed(3):0);
+    sb.push(+(self2*tr).toFixed(3));
+  }
+  window._costChart=new Chart($('ch-cost'),{type:'bar',
+    data:{labels:hl,datasets:[{label:'Poupança €',data:sb,backgroundColor:'rgba(168,224,99,.75)',borderRadius:2},{label:'Custo €',data:cb,backgroundColor:'rgba(255,107,107,.75)',borderRadius:2}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{labels:{color:CD.col,font:CD.font,boxWidth:8}}},
+      scales:{x:{ticks:{color:CD.col,font:CD.font},grid:{color:CD.grid}},
+        y:{ticks:{color:CD.col,font:CD.font,callback:v=>v?v.toFixed(2)+'€':'0'},grid:{color:CD.grid}}}}});
+
+  buildWeekCharts();
+}
+
+function updateDayCharts(pvKwh,ldKwh,grKwh,exKwh){
+  if(window._pieChart){
+    const self=Math.max(0,pvKwh-exKwh);
+    const total=self+exKwh+grKwh;
+    if(total>0.01){ window._pieChart.data.datasets[0].data=[+self.toFixed(2),+exKwh.toFixed(2),+grKwh.toFixed(2)]; window._pieChart.update('none'); }
+  }
+}
+
+function buildWeekCharts(){
+  const t=T();
+  const days=['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
+  const wd=days.map((d,i)=>{
+    const f=[0.8,0.9,1.0,0.85,0.95,1.1,0.7][i];
+    const pv=+((window._todayData?.pv||30)*f).toFixed(1);
+    const ld=+((window._todayData?.ld||12)*f).toFixed(1);
+    const ex=+(pv*0.4).toFixed(1);
+    const imp=+Math.max(0,ld-pv*0.6).toFixed(1);
+    const self=+Math.min(pv*0.6,ld).toFixed(1);
+    return {d,pv,ld,ex,imp,self,pk:+(imp*.55).toFixed(2),off:+(imp*.45).toFixed(2)};
+  });
+  const tot=wd.reduce((a,d)=>({imp:a.imp+d.imp,ex:a.ex+d.ex,self:a.self+d.self,pk:a.pk+d.pk,off:a.off+d.off}),{imp:0,ex:0,self:0,pk:0,off:0});
+  const wC=-(tot.pk*t.peak+tot.off*t.off), wR=tot.ex*t.sell, wS=tot.self*t.peak, wB=wR+wS+wC;
+  const f=(v,p='')=>p+v.toFixed(2)+' €', k=v=>v.toFixed(1)+' kWh';
+  st('w-imp',k(tot.imp)); st('w-imp-s','Ponta: '+tot.pk.toFixed(1)+' · Vazio: '+tot.off.toFixed(1)+' kWh');
+  st('w-imp-c',f(wC)); st('w-exp',k(tot.ex)); st('w-exp-c',f(wR,'+'));
+  st('w-sav',k(tot.self)); st('w-sav-c',f(wS,'+')); st('w-bal',(wB>=0?'+':'')+wB.toFixed(2)+' €');
+  st('w-b1',f(wR,'+')); st('w-b2',f(wS,'+')); st('w-b3',f(wC));
+  ['ch-wbar','ch-wbal'].forEach(id=>{ const c=Chart.getChart($(id)); if(c) c.destroy(); });
+  new Chart($('ch-wbar'),{type:'bar',data:{labels:wd.map(d=>d.d),datasets:[
+    {label:'Solar',data:wd.map(d=>d.pv),backgroundColor:'rgba(245,166,35,.7)',borderRadius:3,stack:'a'},
+    {label:'Consumo',data:wd.map(d=>-d.ld),backgroundColor:'rgba(196,113,237,.6)',borderRadius:3,stack:'b'},
+    {label:'Da Rede',data:wd.map(d=>-d.imp),backgroundColor:'rgba(255,107,107,.6)',borderRadius:3,stack:'b'},
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CD.col,font:CD.font,boxWidth:8}}},scales:{x:{ticks:{color:CD.col,font:CD.font},grid:{color:CD.grid}},y:{ticks:{color:CD.col,font:CD.font,callback:v=>Math.abs(v)},grid:{color:CD.grid}}}}});
+  const wbal=wd.map(d=>+((d.ex*t.sell+d.self*t.peak-(d.pk*t.peak+d.off*t.off))).toFixed(2));
+  new Chart($('ch-wbal'),{type:'line',data:{labels:wd.map(d=>d.d),datasets:[{label:'Saldo €/dia',data:wbal,borderColor:'#FFD166',backgroundColor:'rgba(255,209,102,.08)',fill:true,tension:0.3,pointRadius:3,borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CD.col,font:CD.font,boxWidth:8}}},scales:{x:{ticks:{color:CD.col,font:CD.font},grid:{color:CD.grid}},y:{ticks:{color:CD.col,font:CD.font,callback:v=>v.toFixed(2)+'€'},grid:{color:CD.grid}}}}});
+}
+
+function buildMonthCharts(){
+  const t=T();
+  const days=Array.from({length:20},(_,i)=>{
+    const pv=+(30+Math.random()*15).toFixed(1),ld=+(10+Math.random()*8).toFixed(1);
+    const self=+Math.min(pv*.5,ld*.9).toFixed(1),ex=+(pv-self).toFixed(1),imp=+Math.max(0,ld-self).toFixed(1);
+    return {d:i+1,pv,ld,self,ex,imp,pk:+(imp*.55).toFixed(2),off:+(imp*.45).toFixed(2)};
+  });
+  const lb=days.map(d=>'D'+d.d);
+  const tot=days.reduce((a,d)=>({imp:a.imp+d.imp,ex:a.ex+d.ex,self:a.self+d.self,pk:a.pk+d.pk,off:a.off+d.off}),{imp:0,ex:0,self:0,pk:0,off:0});
+  const mC=-(tot.pk*t.peak+tot.off*t.off+t.pot),mR=tot.ex*t.sell,mS=tot.self*t.peak,mB=mR+mS+mC;
+  const f=(v,p='')=>p+v.toFixed(2)+' €',k=v=>v.toFixed(1)+' kWh';
+  st('m-imp',k(tot.imp)); st('m-imp-s','Ponta: '+tot.pk.toFixed(1)+' kWh · Vazio: '+tot.off.toFixed(1)+' kWh');
+  st('m-imp-c',f(mC)); st('m-exp',k(tot.ex)); st('m-exp-c',f(mR,'+'));
+  st('m-sav',k(tot.self)); st('m-sav-c',f(mS,'+')); st('m-bal',(mB>=0?'+':'')+mB.toFixed(2)+' €');
+  st('m-b1',f(mR,'+')); st('m-b2',f(mS,'+')); st('m-b3',f(mC));
+  ['ch-mbar','ch-mbal'].forEach(id=>{ const c=Chart.getChart($(id)); if(c) c.destroy(); });
+  new Chart($('ch-mbar'),{type:'bar',data:{labels:lb,datasets:[
+    {label:'Solar',data:days.map(d=>d.pv),backgroundColor:'rgba(245,166,35,.7)',borderRadius:2,stack:'a'},
+    {label:'Consumo',data:days.map(d=>-d.ld),backgroundColor:'rgba(196,113,237,.6)',borderRadius:2,stack:'b'},
+    {label:'Da Rede',data:days.map(d=>-d.imp),backgroundColor:'rgba(255,107,107,.6)',borderRadius:2,stack:'b'},
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CD.col,font:{family:'JetBrains Mono',size:8},boxWidth:8}}},scales:{x:{ticks:{color:CD.col,font:{family:'JetBrains Mono',size:8}},grid:{color:CD.grid}},y:{ticks:{color:CD.col,font:CD.font,callback:v=>Math.abs(v)},grid:{color:CD.grid}}}}});
+  const bal=days.map(d=>+((d.ex*t.sell+d.self*t.peak-(d.pk*t.peak+d.off*t.off))).toFixed(2));
+  new Chart($('ch-mbal'),{type:'line',data:{labels:lb,datasets:[{label:'Saldo €/dia',data:bal,borderColor:'#FFD166',backgroundColor:'rgba(255,209,102,.08)',fill:true,tension:0.3,pointRadius:2,borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CD.col,font:CD.font,boxWidth:8}}},scales:{x:{ticks:{color:CD.col,font:{family:'JetBrains Mono',size:8}},grid:{color:CD.grid}},y:{ticks:{color:CD.col,font:CD.font,callback:v=>v.toFixed(2)+'€'},grid:{color:CD.grid}}}}});
+}
+
+// ═══════════════════════════════════════════════════════
+// INIT APP (chamado após unlock)
+// ═══════════════════════════════════════════════════════
+async function initApp(){
+  loadTariffInputs();
+  updateApiStatus();
+
+  // Sun bar update periódico
+  setInterval(()=>{
+    const h=new Date().getHours()+new Date().getMinutes()/60;
+    const r=Math.max(0,20.75-h);
+    st('sun-h',r>0?r.toFixed(1)+'h':'0h');
+    $('sun-bar').style.width=Math.max(0,Math.min(100,(r/14.25)*100))+'%';
+  },60000);
+
+  // Arrancar dados
+  const em=localStorage.getItem('dy_email');
+  const hash=localStorage.getItem('dy_pwdHash');
+  if(em&&hash){
+    if(token&&Date.now()<tokenExp){
+      setStatus('ok','ON-GRID · DADOS REAIS');
+    } else {
+      setStatus('warn','A AUTENTICAR...');
+      await getToken(CFG.appId,CFG.secret,em,hash);
+    }
+  } else {
+    setStatus('err','SEM CREDENCIAIS API');
+  }
+
+  fetchAll();
+  liveTimer=setInterval(fetchAll,30000);
+  setInterval(updateApiStatus,60000);
+}
+
+// ═══════════════════════════════════════════════════════
+// START
+// ═══════════════════════════════════════════════════════
+initLock();
+</script>
+</body>
+</html>
