@@ -91,7 +91,7 @@ body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);displa
 /* FLOW SVG */
 .flow-wrap{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:16px 12px;margin-bottom:12px}
 .flow-svg-wrap{width:100%;position:relative}
-.flow-svg-wrap svg{width:100%;height:auto;display:block}
+.flow-svg-wrap svg{width:100%;height:auto;display:block;overflow:visible}
 .fn-lbl{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;fill:#5A6785;letter-spacing:1px;text-anchor:middle}
 .fn-val{font-family:'JetBrains Mono',monospace;font-weight:600;text-anchor:middle;dominant-baseline:middle}
 .fn-sub{font-family:'JetBrains Mono',monospace;font-size:8px;text-anchor:middle;fill:#5A6785}
@@ -445,6 +445,7 @@ body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);displa
           <div class="fin-kwh" id="amor-pct">0%</div>
           <div class="fin-sub" id="amor-sub">Início: 24 Abril 2026</div>
           <div class="amor-bar-wrap"><div class="amor-bar-fill" id="amor-bar" style="width:0%"></div></div>
+          <div id="amor-ctx" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#5A6785;margin-bottom:8px;line-height:1.5"></div>
           <div class="amor-grid">
             <div class="amor-item"><div class="amor-item-lbl">INVESTIMENTO</div><div class="amor-item-val" id="amor-total">9.340 €</div></div>
             <div class="amor-item"><div class="amor-item-lbl">AMORTIZADO</div><div class="amor-item-val pos" id="amor-done">0 €</div></div>
@@ -542,6 +543,10 @@ body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);displa
           <div class="settings-row">
             <div><div class="settings-row-lbl">Data instalação</div><div class="settings-row-sub">início sistema</div></div>
             <input class="settings-input" id="s-install-date" type="date" value="2026-04-24" style="width:130px">
+          </div>
+          <div class="settings-row">
+            <div><div class="settings-row-lbl">Consumo antes solar</div><div class="settings-row-sub">kWh/mês histórico EDP</div></div>
+            <input class="settings-input" id="s-consumo-hist" type="number" value="1960" step="10">
           </div>
         </div>
         <button class="settings-btn update" onclick="saveInvest()">↻ ACTUALIZAR INVESTIMENTO</button>
@@ -870,6 +875,7 @@ function loadSettingsInputs(){
   $('s-disc-end').value=t.discEnd;
   $('s-invest').value=t.invest;
   $('s-install-date').value=t.installDate;
+  if($('s-consumo-hist')) $('s-consumo-hist').value=localStorage.getItem('s_consumo_hist')||'1960';
   updateTariffDisp();updatePotDisp();updateDiscDisp();
 }
 function saveTariffs(){
@@ -893,6 +899,7 @@ function saveTariffs(){
 function saveInvest(){
   localStorage.setItem('s_invest',$('s-invest').value);
   localStorage.setItem('s_install_date',$('s-install-date').value);
+  if($('s-consumo-hist')) localStorage.setItem('s_consumo_hist',$('s-consumo-hist').value);
   renderFatura();
   const btns=document.querySelectorAll('.settings-btn.update');
   btns[1].textContent='✅ GUARDADO!';
@@ -1040,7 +1047,7 @@ function render(pv,load,grid,bat,batP,temp){
   // SOLAR
   st('m-pv',(pvC/1000).toFixed(2));
   svgTxt('f-pv',Math.round(pvC).toLocaleString('pt')+' W');
-  st('m-pv-s',pvC>0?(pvC/1000).toFixed(2)+' kW 00b7 '+(pvC/12000*100).toFixed(0)+'% inv':(new Date().getHours()<6||new Date().getHours()>21?'Per00edodo nocturno':'Sem produ00e700e3o'));
+  st('m-pv-s',pvC>0?(pvC/1000).toFixed(2)+' kW · '+(pvC/12000*100).toFixed(0)+'% inv':(new Date().getHours()<6||new Date().getHours()>21?'Período nocturno':'Sem produção'));
 
   // BATERIA
   if(bat!==null){
@@ -1048,9 +1055,9 @@ function render(pv,load,grid,bat,batP,temp){
     $('m-batbar').style.width=bat+'%';
     const bw=$('f-bat-bar');if(bw)bw.setAttribute('width',(52*(bat/100)).toFixed(1));
     svgTxt('f-bat',bat.toFixed(0)+'%');
-    if(batC>BAT_MIN)      st('m-bat-s','% 00b7 +'+(batC/1000).toFixed(1)+' kW 2191');
-    else if(batC<-BAT_MIN) st('m-bat-s','% 00b7 '+(batC/1000).toFixed(1)+' kW 2193');
-    else                   st('m-bat-s',bat>=99?'% 00b7 Cheia':'% 00b7 Standby');
+    if(batC>BAT_MIN)      st('m-bat-s','% · +' + (batC/1000).toFixed(1) + ' kW ↑');
+    else if(batC<-BAT_MIN) st('m-bat-s','% · ' + (batC/1000).toFixed(1) + ' kW ↓');
+    else                   st('m-bat-s',bat>=99?'% · Cheia':'% · Standby');
   }
 
   // REDE
@@ -1096,7 +1103,7 @@ function render(pv,load,grid,bat,batP,temp){
     const hours=draw>0.05?Math.min(48,usable/draw):48;
     st("auto-h",hours>=48?">48h":hours.toFixed(1)+"h");
     $("auto-bar").style.width=Math.min(100,(hours/48)*100)+"%";
-    st("auto-sub",usable.toFixed(1)+" kWh u00fateis u00b7 "+draw.toFixed(2)+" kW consumo");
+    st("auto-sub",usable.toFixed(1)+" kWh úteis · "+draw.toFixed(2)+" kW consumo");
   }
 
   // GRÁFICO 24H
@@ -1294,44 +1301,87 @@ function renderFatura(){
   if(temDesconto) html+=`<div class="fat-row"><span class="fat-row-lbl" style="color:#A8E063">✅ Desconto ${t.disc}% energia activo até ${t.discEnd}</span><span class="fat-row-val" style="color:#A8E063">-${((totalFV*t.peak+totalVZ*t.off)*disc).toFixed(2)} €</span></div>`;
   html+=`<div class="fat-row"><span class="fat-total-lbl">TOTAL ESTIMADO</span><span class="fat-total-val">${total.toFixed(2)} €</span></div>`;
   $('fat-rows').innerHTML=html;
-  st('fat-total',total.toFixed(2)+' €');
+  st('fat-total',total.toFixed(2).replace('.',',') + ' €');
   st('fat-period','Mês actual · '+diasComDados+' dias com dados de '+diasMes);
 
-  // AMORTIZAÇÃO
-  const installDate=new Date(t.installDate);
-  const diasSistema=Math.max(1,Math.round((now-installDate)/(1000*60*60*24)));
-  // Poupança acumulada desde instalação
-  const histTotal=hist.filter(d=>new Date(d.date)>=installDate);
-  let totalSav=0,totalRev=0,totalCusto=0;
-  histTotal.forEach(d=>{
-    const date=new Date(d.date);
-    const self=Math.max(0,(d.pv||0)-(d.ex||0));
-    const {fv,vz}=splitVazioFV(d.gr||0,date);
-    const disc2=desconto();
-    totalRev+=(d.ex||0)*t.sell;
-    totalSav+=self*t.peak*(1-disc2);
-    totalCusto+=(fv*t.peak+vz*t.off)*(1-disc2);
+  // ─── AMORTIZAÇÃO ───────────────────────────────────────────
+  // Lógica: poupança real = (custo que tínhamos antes) - (custo actual)
+  //   + receitas UPAC
+  // Consumo histórico antes do solar: ~1960 kWh/mês
+  // Custo médio antes: energia + potência + taxas
+  const installDate = new Date(t.installDate);
+  const diasSistema = Math.max(1, Math.round((now - installDate) / (1000*60*60*24)));
+
+  // Consumo histórico mensal antes do solar (kWh) — dados reais da fatura EDP
+  const histConsumoMensal = parseFloat(localStorage.getItem('s_consumo_hist')) || 1960;
+  // Custo mensal antes do solar (estimativa com tarifas actuais)
+  // Distribuição típica: 60% FV, 40% Vazio
+  const disc2 = desconto();
+  const custoMensalAntes = (histConsumoMensal * 0.60 * t.peak + histConsumoMensal * 0.40 * t.off) * (1-disc2)
+    + t.potDay * 30 * 1.23  // potência c/ IVA
+    + 0.07 * 1.23           // DGEG
+    + histConsumoMensal * 0.001  // IEC
+    + 2.85 * 1.06;          // Audiovisual
+
+  // Poupança acumulada com dados reais
+  const histTotal = hist.filter(d => new Date(d.date) >= installDate);
+  let totalSav = 0, totalRev = 0, totalCustoAtual = 0;
+  histTotal.forEach(d => {
+    const date = new Date(d.date);
+    const self = Math.max(0, (d.pv||0) - (d.ex||0));
+    const {fv, vz} = splitVazioFV(d.gr||0, date);
+    totalRev += (d.ex||0) * t.sell;
+    totalSav += self * t.peak * (1-disc2);
+    totalCustoAtual += (fv * t.peak + vz * t.off) * (1-disc2);
   });
-  const amortizado=totalRev+totalSav;
-  const invest=t.invest;
-  const pct=Math.min(100,(amortizado/invest)*100);
-  const falta=Math.max(0,invest-amortizado);
-  // Estimar data conclusão
-  const mediaMs=diasSistema>0?(amortizado/diasSistema)*30:0;
-  let estData='—';
-  if(mediaMs>0){
-    const mesesFalta=falta/mediaMs;
-    const dataEst=new Date(now);
-    dataEst.setMonth(dataEst.getMonth()+Math.round(mesesFalta));
-    estData=dataEst.toLocaleDateString('pt-PT',{month:'short',year:'numeric'});
+
+  // Se temos dias reais, calcular poupança real; senão estimar por dias
+  const diasComDadosAmor = histTotal.length;
+  let poupancaAcum;
+  if (diasComDadosAmor > 0) {
+    // Poupança real = o que pagávamos antes (pro-rata) - o que pagamos agora + UPAC
+    const custosAntesDias = (custoMensalAntes / 30) * diasComDadosAmor;
+    poupancaAcum = custosAntesDias - totalCustoAtual + totalRev + totalSav;
+  } else {
+    // Sem dados: estimar por dias de sistema
+    poupancaAcum = (custoMensalAntes / 30) * diasSistema * 0.8; // 80% poupança estimada
   }
-  st('amor-pct',pct.toFixed(1)+'%');
-  st('amor-sub','Início: '+installDate.toLocaleDateString('pt-PT')+' · '+diasSistema+' dias em funcionamento');
-  $('amor-bar').style.width=pct+'%';
-  st('amor-total',invest.toLocaleString('pt')+' €');
-  st('amor-done',amortizado.toFixed(0)+' €');
-  st('amor-left',falta.toFixed(0)+' €');
-  st('amor-est',estData);
+  poupancaAcum = Math.max(0, poupancaAcum);
+
+  const invest = t.invest;
+  const pct = Math.min(100, (poupancaAcum / invest) * 100);
+  const falta = Math.max(0, invest - poupancaAcum);
+
+  // Estimar data conclusão com base na poupança mensal real ou estimada
+  const poupancaMs = diasSistema > 0 ? (poupancaAcum / diasSistema) * 30 : custoMensalAntes * 0.8;
+  let estData = '—';
+  if (poupancaMs > 0) {
+    const mesesFalta = falta / poupancaMs;
+    if (mesesFalta < 360) { // máx 30 anos
+      const dataEst = new Date(now);
+      dataEst.setMonth(dataEst.getMonth() + Math.round(mesesFalta));
+      estData = dataEst.toLocaleDateString('pt-PT', {month:'short', year:'numeric'});
+    }
+  }
+
+  st('amor-pct', pct.toFixed(1) + '%');
+  st('amor-sub', 'Início: ' + installDate.toLocaleDateString('pt-PT') + ' · ' + diasSistema + ' dias activo');
+  $('amor-bar').style.width = pct + '%';
+  st('amor-total', invest.toLocaleString('pt') + ' €');
+  st('amor-done', poupancaAcum.toFixed(0) + ' €');
+  st('amor-left', falta.toFixed(0) + ' €');
+  st('amor-est', estData);
+
+  // Info adicional: custo antes vs agora
+  const custoMensalAtual = diasComDadosAmor > 0 ? (totalCustoAtual / diasComDadosAmor) * 30 : null;
+  const poupancaMostra = custoMensalAtual !== null
+    ? 'Antes: ~' + custoMensalAntes.toFixed(0) + '€/mês · Agora: ~' + custoMensalAtual.toFixed(0) + '€/mês'
+    : 'Antes: ~' + custoMensalAntes.toFixed(0) + '€/mês · Poupança: ~' + poupancaMs.toFixed(0) + '€/mês';
+  st('amor-sub', 'Início: ' + installDate.toLocaleDateString('pt-PT') + ' · ' + diasSistema + ' dias' + (diasComDadosAmor > 0 ? ' · ' + diasComDadosAmor + ' dias c/ dados' : ''));
+
+  // Mostrar info contexto se elemento existir
+  const amorCtx = $('amor-ctx');
+  if (amorCtx) amorCtx.textContent = poupancaMostra;
 }
 
 // ═══════════════════════════════════════════════════════
