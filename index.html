@@ -270,85 +270,87 @@ body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);displa
       <div class="flow-wrap">
         <div class="card-label" style="margin-bottom:10px">⚡ FLUXO DE ENERGIA</div>
         <div class="flow-svg-wrap">
-        <svg id="flow-svg" viewBox="0 0 280 320" xmlns="http://www.w3.org/2000/svg" style="overflow:visible">
-          <!-- LINHAS FUNDO -->
-          <line x1="140" y1="82" x2="140" y2="126" stroke="#F5A623" stroke-width="2" stroke-opacity=".15" stroke-dasharray="4,3"/>
-          <line x1="76"  y1="158" x2="112" y2="158" stroke="#A8E063" stroke-width="2" stroke-opacity=".15" stroke-dasharray="4,3"/>
-          <line x1="168" y1="158" x2="204" y2="158" stroke="#4ECDC4" stroke-width="2" stroke-opacity=".15" stroke-dasharray="4,3"/>
-          <line x1="140" y1="190" x2="140" y2="234" stroke="#C471ED" stroke-width="2" stroke-opacity=".15" stroke-dasharray="4,3"/>
+        <svg id="flow-svg" viewBox="0 0 280 280" xmlns="http://www.w3.org/2000/svg">
+          <!-- LINHAS CURVAS FUNDO -->
+          <path d="M80,80 Q140,80 140,130" fill="none" stroke="#F5A623" stroke-width="2" stroke-opacity=".15" stroke-dasharray="5,4"/>
+          <path d="M200,80 Q140,80 140,130" fill="none" stroke="#4ECDC4" stroke-width="2" stroke-opacity=".15" stroke-dasharray="5,4"/>
+          <path d="M80,200 Q140,200 140,150" fill="none" stroke="#A8E063" stroke-width="2" stroke-opacity=".15" stroke-dasharray="5,4"/>
+          <path d="M200,200 Q140,200 140,150" fill="none" stroke="#C471ED" stroke-width="2" stroke-opacity=".15" stroke-dasharray="5,4"/>
           <!-- LINHAS ACTIVAS -->
-          <line id="fl-sun"     x1="140" y1="82"  x2="140" y2="126" stroke="#F5A623" stroke-width="2.5" stroke-opacity="0" stroke-linecap="round"/>
-          <line id="fl-bat-out" x1="76"  y1="158" x2="112" y2="158" stroke="#A8E063" stroke-width="2.5" stroke-opacity="0" stroke-linecap="round"/>
-          <line id="fl-bat-in"  x1="112" y1="158" x2="76"  y2="158" stroke="#A8E063" stroke-width="2.5" stroke-opacity="0" stroke-linecap="round"/>
-          <line id="fl-grd-in"  x1="204" y1="158" x2="168" y2="158" stroke="#FF6B6B" stroke-width="2.5" stroke-opacity="0" stroke-linecap="round"/>
-          <line id="fl-grd-out" x1="168" y1="158" x2="204" y2="158" stroke="#A8E063" stroke-width="2.5" stroke-opacity="0" stroke-linecap="round"/>
-          <line id="fl-load"    x1="140" y1="190" x2="140" y2="234" stroke="#C471ED" stroke-width="2.5" stroke-opacity="0" stroke-linecap="round"/>
+          <path id="fl-sun"     d="M80,80 Q140,80 140,130"  fill="none" stroke="#F5A623" stroke-width="2.5" stroke-opacity="0" stroke-linecap="round"/>
+          <path id="fl-grd-in"  d="M200,80 Q140,80 140,130" fill="none" stroke="#FF6B6B" stroke-width="2.5" stroke-opacity="0" stroke-linecap="round"/>
+          <path id="fl-grd-out" d="M140,130 Q140,80 200,80" fill="none" stroke="#A8E063" stroke-width="2.5" stroke-opacity="0" stroke-linecap="round"/>
+          <path id="fl-bat-out" d="M80,200 Q140,200 140,150" fill="none" stroke="#A8E063" stroke-width="2.5" stroke-opacity="0" stroke-linecap="round"/>
+          <path id="fl-bat-in"  d="M140,150 Q140,200 80,200" fill="none" stroke="#A8E063" stroke-width="2.5" stroke-opacity="0" stroke-linecap="round"/>
+          <path id="fl-load"    d="M140,150 Q140,200 200,200" fill="none" stroke="#C471ED" stroke-width="2.5" stroke-opacity="0" stroke-linecap="round"/>
           <!-- SETAS -->
-          <polygon id="ar-sun"     points="140,122 134,112 146,112" fill="#F5A623" opacity="0"/>
-          <polygon id="ar-bat-out" points="108,158 98,152 98,164"   fill="#A8E063" opacity="0"/>
-          <polygon id="ar-bat-in"  points="80,158 90,152 90,164"    fill="#A8E063" opacity="0"/>
-          <polygon id="ar-grd-in"  points="172,158 182,152 182,164" fill="#FF6B6B" opacity="0"/>
-          <polygon id="ar-grd-out" points="200,158 190,152 190,164" fill="#A8E063" opacity="0"/>
-          <polygon id="ar-load"    points="140,230 134,220 146,220" fill="#C471ED" opacity="0"/>
-          <!-- NÓ SOLAR -->
-          <rect x="102" y="18" width="76" height="64" rx="14" fill="rgba(245,166,35,.12)" stroke="#F5A623" stroke-width="1.5"/>
-          <text x="140" y="40" font-size="22" text-anchor="middle" dominant-baseline="middle">☀️</text>
-          <text x="140" y="61" class="fn-lbl">SOLAR</text>
-          <text id="f-pv" x="140" y="75" class="fn-val" font-size="11" fill="#F5A623">— W</text>
-          <!-- NÓ INVERSOR -->
-          <rect x="112" y="126" width="56" height="64" rx="14" fill="rgba(78,205,196,.15)" stroke="#4ECDC4" stroke-width="2"/>
-          <text x="140" y="147" font-size="20" text-anchor="middle" dominant-baseline="middle">⚡</text>
-          <text x="140" y="165" class="fn-lbl" fill="#4ECDC4">DEYE</text>
-          <text id="f-temp" x="140" y="179" class="fn-val" font-size="9" fill="#4ECDC4">—</text>
-          <!-- NÓ BATERIA (esquerda, começa em x=2) -->
-          <rect x="2" y="126" width="74" height="64" rx="13" fill="rgba(168,224,99,.12)" stroke="#A8E063" stroke-width="1.5"/>
-          <text x="39" y="147" font-size="18" text-anchor="middle" dominant-baseline="middle">🔋</text>
-          <text x="39" y="163" class="fn-lbl">BATERIA</text>
-          <text id="f-bat" x="39" y="176" class="fn-val" font-size="11" fill="#A8E063">—%</text>
-          <rect x="9" y="182" width="60" height="3" rx="1.5" fill="rgba(255,255,255,.08)"/>
-          <rect id="f-bat-bar" x="9" y="182" width="0" height="3" rx="1.5" fill="#A8E063"/>
-          <!-- NÓ REDE (direita, termina em x=278) -->
-          <rect x="204" y="126" width="74" height="64" rx="13" fill="rgba(78,205,196,.10)" stroke="#4ECDC4" stroke-width="1.5"/>
-          <text x="241" y="147" font-size="18" text-anchor="middle" dominant-baseline="middle">🔌</text>
-          <text x="241" y="163" class="fn-lbl">REDE</text>
-          <text id="f-grid" x="241" y="174" class="fn-val" font-size="10" fill="#4ECDC4">— W</text>
-          <text id="f-grid-dir" x="241" y="185" class="fn-sub">—</text>
-          <!-- NÓ CONSUMO -->
-          <rect x="102" y="234" width="76" height="64" rx="14" fill="rgba(196,113,237,.12)" stroke="#C471ED" stroke-width="1.5"/>
-          <text x="140" y="255" font-size="22" text-anchor="middle" dominant-baseline="middle">🏠</text>
-          <text x="140" y="274" class="fn-lbl">CONSUMO</text>
-          <text id="f-load" x="140" y="287" class="fn-val" font-size="11" fill="#C471ED">— W</text>
-          <!-- PONTOS SOLAR -->
+          <polygon id="ar-sun"     points="140,128 134,116 146,116" fill="#F5A623" opacity="0"/>
+          <polygon id="ar-grd-in"  points="140,128 134,116 146,116" fill="#FF6B6B" opacity="0"/>
+          <polygon id="ar-grd-out" points="197,83 190,93 202,90"    fill="#A8E063" opacity="0"/>
+          <polygon id="ar-bat-out" points="140,152 134,164 146,164" fill="#A8E063" opacity="0"/>
+          <polygon id="ar-bat-in"  points="83,197 93,190 90,202"    fill="#A8E063" opacity="0"/>
+          <polygon id="ar-load"    points="197,197 187,193 193,205" fill="#C471ED" opacity="0"/>
+          <!-- NÓ SOLAR (topo esquerda) -->
+          <rect x="16" y="16" width="100" height="88" rx="18" fill="rgba(245,166,35,.12)" stroke="#F5A623" stroke-width="1.5"/>
+          <text x="66" y="43" font-size="24" text-anchor="middle" dominant-baseline="middle">☀️</text>
+          <text x="66" y="65" class="fn-lbl" style="font-size:8px">SOLAR</text>
+          <text id="f-pv" x="66" y="81" class="fn-val" font-size="11" fill="#F5A623">— W</text>
+          <text x="66" y="95" class="fn-sub" id="f-pv-pct">—</text>
+          <!-- NÓ REDE (topo direita) -->
+          <rect x="164" y="16" width="100" height="88" rx="18" fill="rgba(78,205,196,.10)" stroke="#4ECDC4" stroke-width="1.5"/>
+          <text x="214" y="43" font-size="24" text-anchor="middle" dominant-baseline="middle">🔌</text>
+          <text x="214" y="65" class="fn-lbl" style="font-size:8px">REDE</text>
+          <text id="f-grid" x="214" y="81" class="fn-val" font-size="11" fill="#4ECDC4">— W</text>
+          <text id="f-grid-dir" x="214" y="95" class="fn-sub">—</text>
+          <!-- NÓ BATERIA (baixo esquerda) -->
+          <rect x="16" y="176" width="100" height="88" rx="18" fill="rgba(168,224,99,.12)" stroke="#A8E063" stroke-width="1.5"/>
+          <text x="66" y="203" font-size="24" text-anchor="middle" dominant-baseline="middle">🔋</text>
+          <text x="66" y="225" class="fn-lbl" style="font-size:8px">BATERIA</text>
+          <text id="f-bat" x="66" y="241" class="fn-val" font-size="12" fill="#A8E063">—%</text>
+          <rect x="24" y="249" width="76" height="3" rx="1.5" fill="rgba(255,255,255,.08)"/>
+          <rect id="f-bat-bar" x="24" y="249" width="0" height="3" rx="1.5" fill="#A8E063"/>
+          <!-- NÓ CONSUMO (baixo direita) -->
+          <rect x="164" y="176" width="100" height="88" rx="18" fill="rgba(196,113,237,.12)" stroke="#C471ED" stroke-width="1.5"/>
+          <text x="214" y="203" font-size="24" text-anchor="middle" dominant-baseline="middle">🏠</text>
+          <text x="214" y="225" class="fn-lbl" style="font-size:8px">CONSUMO</text>
+          <text id="f-load" x="214" y="241" class="fn-val" font-size="12" fill="#C471ED">— W</text>
+          <!-- NÓ INVERSOR (centro) -->
+          <rect x="104" y="104" width="72" height="72" rx="20" fill="rgba(78,205,196,.18)" stroke="#4ECDC4" stroke-width="2.5"/>
+          <text x="140" y="130" font-size="26" text-anchor="middle" dominant-baseline="middle">⚡</text>
+          <text x="140" y="154" class="fn-lbl" fill="#4ECDC4" style="font-size:8px">DEYE 12kW</text>
+          <text id="f-temp" x="140" y="167" class="fn-val" font-size="8" fill="#4ECDC4">—</text>
+
+          <!-- PONTOS SOLAR → INV -->
           <circle id="ds1" r="4" fill="#F5A623" opacity="0"><animateMotion dur="1.2s" repeatCount="indefinite" begin="0s"><mpath href="#ps"/></animateMotion></circle>
           <circle id="ds2" r="4" fill="#F5A623" opacity="0"><animateMotion dur="1.2s" repeatCount="indefinite" begin="0.4s"><mpath href="#ps"/></animateMotion></circle>
           <circle id="ds3" r="4" fill="#F5A623" opacity="0"><animateMotion dur="1.2s" repeatCount="indefinite" begin="0.8s"><mpath href="#ps"/></animateMotion></circle>
-          <!-- PONTOS BAT DESCARGA -->
-          <circle id="dbd1" r="4" fill="#A8E063" opacity="0"><animateMotion dur="1s" repeatCount="indefinite" begin="0s"><mpath href="#pbo"/></animateMotion></circle>
-          <circle id="dbd2" r="4" fill="#A8E063" opacity="0"><animateMotion dur="1s" repeatCount="indefinite" begin="0.33s"><mpath href="#pbo"/></animateMotion></circle>
-          <circle id="dbd3" r="4" fill="#A8E063" opacity="0"><animateMotion dur="1s" repeatCount="indefinite" begin="0.66s"><mpath href="#pbo"/></animateMotion></circle>
-          <!-- PONTOS BAT CARGA -->
-          <circle id="dbc1" r="4" fill="#A8E063" opacity="0"><animateMotion dur="1s" repeatCount="indefinite" begin="0s"><mpath href="#pbi"/></animateMotion></circle>
-          <circle id="dbc2" r="4" fill="#A8E063" opacity="0"><animateMotion dur="1s" repeatCount="indefinite" begin="0.33s"><mpath href="#pbi"/></animateMotion></circle>
-          <circle id="dbc3" r="4" fill="#A8E063" opacity="0"><animateMotion dur="1s" repeatCount="indefinite" begin="0.66s"><mpath href="#pbi"/></animateMotion></circle>
-          <!-- PONTOS REDE IMPORTAR -->
+          <!-- PONTOS REDE → INV (importar) -->
           <circle id="dgi1" r="4" fill="#FF6B6B" opacity="0"><animateMotion dur="1s" repeatCount="indefinite" begin="0s"><mpath href="#pgi"/></animateMotion></circle>
           <circle id="dgi2" r="4" fill="#FF6B6B" opacity="0"><animateMotion dur="1s" repeatCount="indefinite" begin="0.33s"><mpath href="#pgi"/></animateMotion></circle>
           <circle id="dgi3" r="4" fill="#FF6B6B" opacity="0"><animateMotion dur="1s" repeatCount="indefinite" begin="0.66s"><mpath href="#pgi"/></animateMotion></circle>
-          <!-- PONTOS REDE EXPORTAR -->
+          <!-- PONTOS INV → REDE (exportar) -->
           <circle id="dgo1" r="4" fill="#A8E063" opacity="0"><animateMotion dur="1s" repeatCount="indefinite" begin="0s"><mpath href="#pgo"/></animateMotion></circle>
           <circle id="dgo2" r="4" fill="#A8E063" opacity="0"><animateMotion dur="1s" repeatCount="indefinite" begin="0.33s"><mpath href="#pgo"/></animateMotion></circle>
           <circle id="dgo3" r="4" fill="#A8E063" opacity="0"><animateMotion dur="1s" repeatCount="indefinite" begin="0.66s"><mpath href="#pgo"/></animateMotion></circle>
-          <!-- PONTOS CONSUMO -->
+          <!-- PONTOS BAT → INV (descarga) -->
+          <circle id="dbd1" r="4" fill="#A8E063" opacity="0"><animateMotion dur="1s" repeatCount="indefinite" begin="0s"><mpath href="#pbo"/></animateMotion></circle>
+          <circle id="dbd2" r="4" fill="#A8E063" opacity="0"><animateMotion dur="1s" repeatCount="indefinite" begin="0.33s"><mpath href="#pbo"/></animateMotion></circle>
+          <circle id="dbd3" r="4" fill="#A8E063" opacity="0"><animateMotion dur="1s" repeatCount="indefinite" begin="0.66s"><mpath href="#pbo"/></animateMotion></circle>
+          <!-- PONTOS INV → BAT (carga) -->
+          <circle id="dbc1" r="4" fill="#F5A623" opacity="0"><animateMotion dur="1s" repeatCount="indefinite" begin="0s"><mpath href="#pbi"/></animateMotion></circle>
+          <circle id="dbc2" r="4" fill="#F5A623" opacity="0"><animateMotion dur="1s" repeatCount="indefinite" begin="0.33s"><mpath href="#pbi"/></animateMotion></circle>
+          <circle id="dbc3" r="4" fill="#F5A623" opacity="0"><animateMotion dur="1s" repeatCount="indefinite" begin="0.66s"><mpath href="#pbi"/></animateMotion></circle>
+          <!-- PONTOS INV → CONSUMO -->
           <circle id="dld1" r="4" fill="#C471ED" opacity="0"><animateMotion dur="1.1s" repeatCount="indefinite" begin="0s"><mpath href="#pld"/></animateMotion></circle>
           <circle id="dld2" r="4" fill="#C471ED" opacity="0"><animateMotion dur="1.1s" repeatCount="indefinite" begin="0.37s"><mpath href="#pld"/></animateMotion></circle>
           <circle id="dld3" r="4" fill="#C471ED" opacity="0"><animateMotion dur="1.1s" repeatCount="indefinite" begin="0.73s"><mpath href="#pld"/></animateMotion></circle>
           <!-- PATHS -->
-          <path id="ps"  d="M140,82 L140,126"  fill="none"/>
-          <path id="pbo" d="M76,158 L112,158"  fill="none"/>
-          <path id="pbi" d="M112,158 L76,158"  fill="none"/>
-          <path id="pgi" d="M204,158 L168,158" fill="none"/>
-          <path id="pgo" d="M168,158 L204,158" fill="none"/>
-          <path id="pld" d="M140,190 L140,234" fill="none"/>
+          <path id="ps"  d="M80,80 Q140,80 140,130"  fill="none"/>
+          <path id="pgi" d="M200,80 Q140,80 140,130"  fill="none"/>
+          <path id="pgo" d="M140,130 Q140,80 200,80"  fill="none"/>
+          <path id="pbo" d="M80,200 Q140,200 140,150"  fill="none"/>
+          <path id="pbi" d="M140,150 Q140,200 80,200"  fill="none"/>
+          <path id="pld" d="M140,150 Q140,200 200,200" fill="none"/>
         </svg>
         </div>
         <div id="flow-legend" style="display:flex;justify-content:center;gap:12px;margin-top:8px;flex-wrap:wrap">
@@ -1439,19 +1441,27 @@ function updateFlow(pvW,ldW,gridW,bat,batP){
   const hasSun=pvW>20,hasLoad=ldW>20;
   const batChg=batP>50,batDis=batP<-50;
   const gridImp=gridW>50,gridExp=gridW<-50;
-  const setLine=(id,on,col)=>{const e=$(id);if(!e)return;e.setAttribute('stroke-opacity',on?'0.9':'0');if(col)e.setAttribute('stroke',col);};
-  const setAr=(id,on,col='#F5A623')=>{const e=$(id);if(!e)return;e.setAttribute('opacity',on?'1':'0');e.setAttribute('fill',col);};
-  setLine('fl-sun',hasSun,'#F5A623');setLine('fl-bat-in',batChg,'#A8E063');setLine('fl-bat-out',batDis,'#A8E063');
-  setLine('fl-grd-in',gridImp,'#FF6B6B');setLine('fl-grd-out',gridExp,'#A8E063');setLine('fl-load',hasLoad,'#C471ED');
-  setAr('ar-sun',hasSun,'#F5A623');setAr('ar-bat-in',batChg,'#A8E063');setAr('ar-bat-out',batDis,'#A8E063');
-  setAr('ar-grd-in',gridImp,'#FF6B6B');setAr('ar-grd-out',gridExp,'#A8E063');setAr('ar-load',hasLoad,'#C471ED');
+  const setPath=(id,on,col)=>{const e=$(id);if(!e)return;e.setAttribute('stroke-opacity',on?'0.85':'0');if(col)e.setAttribute('stroke',col);};
+  const setAr=(id,on,col)=>{const e=$(id);if(!e)return;e.setAttribute('opacity',on?'1':'0');if(col)e.setAttribute('fill',col);};
+  setPath('fl-sun',hasSun,'#F5A623');
+  setPath('fl-bat-in',batChg,'#F5A623'); // carga bat: energia solar → bat (amarelo)
+  setPath('fl-bat-out',batDis,'#A8E063'); // descarga bat → inv (verde)
+  setPath('fl-grd-in',gridImp,'#FF6B6B');
+  setPath('fl-grd-out',gridExp,'#A8E063');
+  setPath('fl-load',hasLoad,'#C471ED');
+  setAr('ar-sun',hasSun,'#F5A623');
+  setAr('ar-bat-out',batDis,'#A8E063');
+  setAr('ar-bat-in',batChg,'#F5A623');
+  setAr('ar-grd-in',gridImp,'#FF6B6B');
+  setAr('ar-grd-out',gridExp,'#A8E063');
+  setAr('ar-load',hasLoad,'#C471ED');
   ['ds1','ds2','ds3'].forEach(id=>setSVGOp(id,hasSun?1:0));
   ['dbd1','dbd2','dbd3'].forEach(id=>setSVGOp(id,batDis?1:0));
   ['dbc1','dbc2','dbc3'].forEach(id=>setSVGOp(id,batChg?1:0));
   ['dgi1','dgi2','dgi3'].forEach(id=>setSVGOp(id,gridImp?1:0));
   ['dgo1','dgo2','dgo3'].forEach(id=>setSVGOp(id,gridExp?1:0));
   ['dld1','dld2','dld3'].forEach(id=>setSVGOp(id,hasLoad?1:0));
-  const bw=$("f-bat-bar");if(bw&&bat!==null)bw.setAttribute("width",(60*(bat/100)).toFixed(1));
+  const bw=$('f-bat-bar');if(bw&&bat!==null)bw.setAttribute('width',(76*(bat/100)).toFixed(1));
   const leg=[];
   if(hasSun)   leg.push(`<span style="color:#F5A623;font-family:'JetBrains Mono',monospace;font-size:9px">Solar: ${(pvW/1000).toFixed(2)} kW</span>`);
   if(batChg)   leg.push(`<span style="color:#A8E063;font-family:'JetBrains Mono',monospace;font-size:9px">Bat: +${(batP/1000).toFixed(2)} kW</span>`);
