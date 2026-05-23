@@ -90,8 +90,8 @@ body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);displa
 
 /* FLOW SVG */
 .flow-wrap{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:16px 12px;margin-bottom:12px}
-.flow-svg-wrap{width:100%;position:relative}
-.flow-svg-wrap svg{width:100%;height:auto;display:block;overflow:visible}
+.flow-svg-wrap{width:100%;position:relative;overflow:hidden}
+.flow-svg-wrap svg{width:100%;height:auto;display:block}
 .fn-lbl{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;fill:#5A6785;letter-spacing:1px;text-anchor:middle}
 .fn-val{font-family:'JetBrains Mono',monospace;font-weight:600;text-anchor:middle;dominant-baseline:middle}
 .fn-sub{font-family:'JetBrains Mono',monospace;font-size:8px;text-anchor:middle;fill:#5A6785}
@@ -362,7 +362,8 @@ body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);displa
           <div class="chart-lbl" style="margin-bottom:0">☀️ PRODUÇÃO HOJE — hora a hora</div>
           <button onclick="expandChart()" style="background:rgba(78,205,196,.15);border:1px solid rgba(78,205,196,.3);color:#4ECDC4;font-family:'JetBrains Mono',monospace;font-size:9px;padding:5px 10px;border-radius:8px;cursor:pointer">↗ EXPANDIR</button>
         </div>
-        <div class="chart-wrap" style="position:relative"><canvas id="ch-line"></canvas><div id="chart-msg" style="display:none;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:JetBrains Mono,monospace;font-size:10px;color:#5A6785;text-align:center;pointer-events:none">A acumular dados...<br>Actualiza a cada hora</div></div>
+        <div class="chart-wrap"><canvas id="ch-line"></canvas></div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#5A6785;text-align:center;margin-top:6px;padding:0 8px" id="chart-msg">A acumular dados em tempo real · actualiza a cada hora</div>
       </div>
 
       <!-- RESUMO DIA -->
@@ -382,7 +383,7 @@ body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);displa
       <div class="itabs">
         <button class="itab on" id="itab-d" onclick="switchFin('d')">HOJE</button>
         <button class="itab" id="itab-h" onclick="switchFin('h')">HISTÓRICO</button>
-        <button class="itab" id="itab-f" onclick="switchFin('f')">FATURA</button>
+        <button class="itab" id="itab-f" onclick="switchFin('f')">RETORNO</button>
       </div>
 
       <!-- HOJE -->
@@ -432,27 +433,58 @@ body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);displa
         </div>
       </div>
 
-      <!-- FATURA ESTIMADA -->
+      <!-- RETORNO INVESTIMENTO + FATURA -->
       <div class="itp" id="itp-f">
-        <div class="fin-card fat">
-          <div class="fin-header"><span class="fin-icon">🧾</span><div><div class="fin-lbl">FATURA ESTIMADA EDP</div></div></div>
-          <div class="fin-kwh" id="fat-total">— €</div>
-          <div class="fin-sub" id="fat-period">Mês actual</div>
+
+        <!-- AMORTIZAÇÃO — DESTAQUE PRINCIPAL -->
+        <div style="background:linear-gradient(135deg,rgba(255,209,102,.12),rgba(255,209,102,.04));border:1px solid rgba(255,209,102,.3);border-radius:20px;padding:20px 16px;margin-bottom:12px">
+          <div style="font-size:9px;font-weight:700;letter-spacing:3px;color:#FFD166;font-family:'JetBrains Mono',monospace;margin-bottom:16px">🏦 RETORNO DO INVESTIMENTO</div>
+
+          <!-- Percentagem grande -->
+          <div style="text-align:center;margin-bottom:16px">
+            <div style="font-size:56px;font-weight:800;color:#FFD166;line-height:1" id="amor-pct">0%</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#5A6785;margin-top:4px" id="amor-sub">Início: 24 Abril 2026</div>
+          </div>
+
+          <!-- Barra de progresso grande -->
+          <div style="background:rgba(255,255,255,.06);border-radius:100px;height:12px;overflow:hidden;margin-bottom:16px;position:relative">
+            <div id="amor-bar" style="height:100%;border-radius:100px;background:linear-gradient(90deg,#F5A623,#FFD166);transition:width 1.5s ease;position:relative;overflow:hidden;width:0%">
+              <div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.3),transparent);animation:shim 2s linear infinite"></div>
+            </div>
+          </div>
+
+          <!-- 4 métricas -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+            <div style="background:rgba(0,0,0,.2);border-radius:12px;padding:12px 10px;text-align:center">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#5A6785;letter-spacing:1px;margin-bottom:4px">INVESTIDO</div>
+              <div style="font-size:18px;font-weight:800;color:#E8EDF5" id="amor-total">9.340 €</div>
+            </div>
+            <div style="background:rgba(168,224,99,.08);border-radius:12px;padding:12px 10px;text-align:center;border:1px solid rgba(168,224,99,.15)">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#A8E063;letter-spacing:1px;margin-bottom:4px">RECUPERADO</div>
+              <div style="font-size:18px;font-weight:800;color:#A8E063" id="amor-done">0 €</div>
+            </div>
+            <div style="background:rgba(255,107,107,.06);border-radius:12px;padding:12px 10px;text-align:center;border:1px solid rgba(255,107,107,.15)">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#FF6B6B;letter-spacing:1px;margin-bottom:4px">FALTA</div>
+              <div style="font-size:18px;font-weight:800;color:#FF6B6B" id="amor-left">9.340 €</div>
+            </div>
+            <div style="background:rgba(78,205,196,.06);border-radius:12px;padding:12px 10px;text-align:center;border:1px solid rgba(78,205,196,.15)">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#4ECDC4;letter-spacing:1px;margin-bottom:4px">CONCLUSÃO</div>
+              <div style="font-size:15px;font-weight:800;color:#4ECDC4" id="amor-est">—</div>
+            </div>
+          </div>
+
+          <!-- Detalhe poupança -->
+          <div id="amor-detail" style="background:rgba(0,0,0,.2);border-radius:12px;padding:12px"></div>
+        </div>
+
+        <!-- FATURA EDP ESTIMADA -->
+        <div style="background:var(--card);border:1px solid rgba(255,107,107,.2);border-radius:20px;padding:16px;margin-bottom:12px">
+          <div style="font-size:9px;font-weight:700;letter-spacing:3px;color:#FF6B6B;font-family:'JetBrains Mono',monospace;margin-bottom:12px">🧾 FATURA EDP ESTIMADA</div>
+          <div style="font-size:36px;font-weight:800;color:#FF6B6B;margin-bottom:2px" id="fat-total">— €</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#5A6785;margin-bottom:14px" id="fat-period">Mês actual</div>
           <div id="fat-rows"></div>
         </div>
-        <div class="fin-card amor">
-          <div class="fin-header"><span class="fin-icon">🏦</span><div><div class="fin-lbl">AMORTIZAÇÃO DO INVESTIMENTO</div></div></div>
-          <div class="fin-kwh" id="amor-pct">0%</div>
-          <div class="fin-sub" id="amor-sub">Início: 24 Abril 2026</div>
-          <div class="amor-bar-wrap"><div class="amor-bar-fill" id="amor-bar" style="width:0%"></div></div>
-          <div id="amor-ctx" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#5A6785;margin-bottom:8px;line-height:1.5"></div>
-          <div class="amor-grid">
-            <div class="amor-item"><div class="amor-item-lbl">INVESTIMENTO</div><div class="amor-item-val" id="amor-total">9.340 €</div></div>
-            <div class="amor-item"><div class="amor-item-lbl">AMORTIZADO</div><div class="amor-item-val pos" id="amor-done">0 €</div></div>
-            <div class="amor-item"><div class="amor-item-lbl">FALTA</div><div class="amor-item-val neg" id="amor-left">9.340 €</div></div>
-            <div class="amor-item"><div class="amor-item-lbl">ESTIMATIVA</div><div class="amor-item-val" id="amor-est">—</div></div>
-          </div>
-        </div>
+
       </div>
     </div>
 
@@ -833,7 +865,7 @@ function navTo(id){
     $('page-'+p).classList.toggle('active',p===id);
     $('nav-'+p).classList.toggle('active',p===id);
   });
-  if(id==='fin') renderFin();
+  if(id==='fin'){ renderFin(); setTimeout(renderFatura,200); }
 }
 
 function switchFin(id){
@@ -1141,7 +1173,8 @@ function renderDay(pv,ld,gr,ex,bc,bd){
 
 function recalcDay(pv,ld,gr,ex){
   const t=T(),now=new Date();
-  const self=Math.max(0,pv-ex);
+  // Autoconsumo = min(solar, consumo) — nunca maior que o consumo real
+  const self=Math.min(pv, Math.max(0,ld-gr));
   const {fv,vz}=splitVazioFV(gr,now);
   const disc=desconto();
   // Custo: energia + desconto já incluído nas tarifas do settings
@@ -1171,8 +1204,15 @@ function recalcDay(pv,ld,gr,ex){
 // ═══════════════════════════════════════════════════════
 function renderFin(){
   const tab=document.querySelector('.itab.on')?.id?.replace('itab-','');
+  // HOJE — recalcular sempre com dados actuais
+  if(tab==='d'||!tab){
+    const d=window._todayData;
+    if(d) recalcDay(d.pv||0,d.ld||0,d.gr||0,d.ex||0);
+  }
   if(tab==='h') renderHistorico();
   if(tab==='f') renderFatura();
+  // Sempre renderizar fatura em background para ter amortização actualizada
+  setTimeout(()=>{ if(document.querySelector('.itab.on')?.id==='itab-f') renderFatura(); },100);
 }
 
 function renderHistorico(){
@@ -1364,6 +1404,7 @@ function renderFatura(){
     }
   }
 
+  // Preencher amortização
   st('amor-pct', pct.toFixed(1) + '%');
   st('amor-sub', 'Início: ' + installDate.toLocaleDateString('pt-PT') + ' · ' + diasSistema + ' dias activo');
   $('amor-bar').style.width = pct + '%';
@@ -1372,16 +1413,23 @@ function renderFatura(){
   st('amor-left', falta.toFixed(0) + ' €');
   st('amor-est', estData);
 
-  // Info adicional: custo antes vs agora
+  // Detalhe amortização
   const custoMensalAtual = diasComDadosAmor > 0 ? (totalCustoAtual / diasComDadosAmor) * 30 : null;
-  const poupancaMostra = custoMensalAtual !== null
-    ? 'Antes: ~' + custoMensalAntes.toFixed(0) + '€/mês · Agora: ~' + custoMensalAtual.toFixed(0) + '€/mês'
-    : 'Antes: ~' + custoMensalAntes.toFixed(0) + '€/mês · Poupança: ~' + poupancaMs.toFixed(0) + '€/mês';
-  st('amor-sub', 'Início: ' + installDate.toLocaleDateString('pt-PT') + ' · ' + diasSistema + ' dias' + (diasComDadosAmor > 0 ? ' · ' + diasComDadosAmor + ' dias c/ dados' : ''));
-
-  // Mostrar info contexto se elemento existir
-  const amorCtx = $('amor-ctx');
-  if (amorCtx) amorCtx.textContent = poupancaMostra;
+  const amorDetail = $('amor-detail');
+  if (amorDetail) {
+    const rowStyle = 'display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.05);font-family:\'JetBrains Mono\',monospace;font-size:10px';
+    const lastRowStyle = 'display:flex;justify-content:space-between;padding:5px 0;font-family:\'JetBrains Mono\',monospace;font-size:10px';
+    let html = '';
+    html += `<div style="${rowStyle}"><span style="color:#5A6785">Custo s/ solar/mês</span><span style="color:#FF6B6B">~${custoMensalAntes.toFixed(0)} €</span></div>`;
+    if (custoMensalAtual !== null) {
+      html += `<div style="${rowStyle}"><span style="color:#5A6785">Custo c/ solar/mês</span><span style="color:#A8E063">~${custoMensalAtual.toFixed(0)} €</span></div>`;
+    }
+    html += `<div style="${rowStyle}"><span style="color:#5A6785">Poupança/mês</span><span style="color:#FFD166">~${poupancaMs.toFixed(0)} €</span></div>`;
+    html += `<div style="${rowStyle}"><span style="color:#5A6785">Receita UPAC</span><span style="color:#A8E063">+${totalRev.toFixed(2)} €</span></div>`;
+    html += `<div style="${rowStyle}"><span style="color:#5A6785">Poupança autoconsumo</span><span style="color:#A8E063">+${totalSav.toFixed(2)} €</span></div>`;
+    html += `<div style="${lastRowStyle}"><span style="color:#5A6785">${diasComDadosAmor} dias com dados reais</span><span style="color:#FFD166">${poupancaAcum.toFixed(0)} € recuperados</span></div>`;
+    amorDetail.innerHTML = html;
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1405,12 +1453,12 @@ function updateFlow(pvW,ldW,gridW,bat,batP){
   ['dld1','dld2','dld3'].forEach(id=>setSVGOp(id,hasLoad?1:0));
   const bw=$("f-bat-bar");if(bw&&bat!==null)bw.setAttribute("width",(72*(bat/100)).toFixed(1));
   const leg=[];
-  if(hasSun)   leg.push(`<span style="color:#F5A623;font-family:'JetBrains Mono',monospace;font-size:9px">☀️ ${(pvW/1000).toFixed(2)} kW</span>`);
-  if(batChg)   leg.push(`<span style="color:#A8E063;font-family:'JetBrains Mono',monospace;font-size:9px">🔋 +${(batP/1000).toFixed(2)} kW</span>`);
-  if(batDis)   leg.push(`<span style="color:#A8E063;font-family:'JetBrains Mono',monospace;font-size:9px">🔋 ${(batP/1000).toFixed(2)} kW</span>`);
-  if(gridImp)  leg.push(`<span style="color:#FF6B6B;font-family:'JetBrains Mono',monospace;font-size:9px">🔌 ↓${(gridW/1000).toFixed(2)} kW</span>`);
-  if(gridExp)  leg.push(`<span style="color:#A8E063;font-family:'JetBrains Mono',monospace;font-size:9px">🔌 ↑${(Math.abs(gridW)/1000).toFixed(2)} kW</span>`);
-  if(hasLoad)  leg.push(`<span style="color:#C471ED;font-family:'JetBrains Mono',monospace;font-size:9px">🏠 ${(ldW/1000).toFixed(2)} kW</span>`);
+  if(hasSun)   leg.push(`<span style="color:#F5A623;font-family:'JetBrains Mono',monospace;font-size:9px">Solar: ${(pvW/1000).toFixed(2)} kW</span>`);
+  if(batChg)   leg.push(`<span style="color:#A8E063;font-family:'JetBrains Mono',monospace;font-size:9px">Bat: +${(batP/1000).toFixed(2)} kW</span>`);
+  if(batDis)   leg.push(`<span style="color:#A8E063;font-family:'JetBrains Mono',monospace;font-size:9px">Bat: ${(batP/1000).toFixed(2)} kW</span>`);
+  if(gridImp)  leg.push(`<span style="color:#FF6B6B;font-family:'JetBrains Mono',monospace;font-size:9px">Rede: ↓${(gridW/1000).toFixed(2)} kW</span>`);
+  if(gridExp)  leg.push(`<span style="color:#A8E063;font-family:'JetBrains Mono',monospace;font-size:9px">Rede: ↑${(Math.abs(gridW)/1000).toFixed(2)} kW</span>`);
+  if(hasLoad)  leg.push(`<span style="color:#C471ED;font-family:'JetBrains Mono',monospace;font-size:9px">Casa: ${(ldW/1000).toFixed(2)} kW</span>`);
   const lg=$('flow-legend');
   if(lg) lg.innerHTML=leg.length?leg.join(''):`<span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#5A6785">Sem fluxo activo</span>`;
 }
@@ -1505,6 +1553,10 @@ function updateLiveChart(pvW,ldW,batW,gridW){
   lineChart.data.datasets[2].data=liveData.bat;
   lineChart.data.datasets[3].data=liveData.gr;
   lineChart.update('none');
+  // Mostrar mensagem se menos de 2 pontos reais
+  const realPts=liveData.pv.filter(v=>v!==null).length;
+  const msg=$('chart-msg');
+  if(msg) msg.style.display=realPts<2?'flex':'none';
 }
 
 function update24hChart(pvW,ldW,batW,gridW){
