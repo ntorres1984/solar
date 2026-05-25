@@ -851,7 +851,10 @@ function histAll(){
 // ═══════════════════════════════════════════════════════
 const LOCK_KEY='solar_pwd_hash';
 async function initLock(){
-  $('lock-hint').innerHTML='Password: solar2024 &nbsp;|&nbsp; <span onclick="resetPwd()" style="color:#4ECDC4;cursor:pointer;text-decoration:underline">Repor</span>';
+  // Repor sempre a password para solar2024 para garantir acesso
+  const h=await sha256('solar2024');
+  localStorage.setItem(LOCK_KEY,h);
+  $('lock-hint').innerHTML='Password: <b style="color:#4ECDC4">solar2024</b>';
   $('lock-pwd').addEventListener('keydown',e=>{if(e.key==='Enter')tryUnlock();});
   $('lock-btn').onclick=tryUnlock;
 }
@@ -860,12 +863,8 @@ async function tryUnlock(){
   if(!pwd){$('lock-err').textContent='Introduz a password';return;}
   const h=await sha256(pwd);
   const stored=localStorage.getItem(LOCK_KEY);
-  if(!stored){
-    localStorage.setItem(LOCK_KEY,h);
-    $('lock').style.display='none';$('app').style.display='flex';initApp();
-    return;
-  }
-  if(h===stored){
+  if(h===stored||!stored){
+    if(!stored) localStorage.setItem(LOCK_KEY,h);
     $('lock').style.display='none';$('app').style.display='flex';initApp();
   } else {
     $('lock-err').textContent='Password incorrecta';
@@ -875,11 +874,11 @@ async function tryUnlock(){
   }
 }
 async function resetPwd(){
-  localStorage.removeItem(LOCK_KEY);
   const h=await sha256('solar2024');
   localStorage.setItem(LOCK_KEY,h);
-  $('lock-hint').innerHTML='✅ Reposto! Usa: solar2024 &nbsp;|&nbsp; <span onclick="resetPwd()" style="color:#4ECDC4;cursor:pointer;text-decoration:underline">Repor</span>';
-  $('lock-pwd').value='solar2024';
+  $('lock-hint').innerHTML='✅ Reposto! Password: <b style="color:#4ECDC4">solar2024</b>';
+  $('lock-pwd').value='';
+  $('lock-err').textContent='';
   $('lock-pwd').focus();
 }
 function doLogout(){
