@@ -1313,10 +1313,10 @@ async function renderHistorico(){
     const bal=rev+sav-custo;
     const dateStr=d.date.slice(5); // MM-DD
     html+=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;padding:5px 0;border-top:1px solid rgba(255,255,255,.05)">`;
-    html+=`<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#5A6785">${dateStr}</div>`;
-    html+=`<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#F5A623;text-align:right">${(d.pv||0).toFixed(1)}</div>`;
-    html+=`<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#FF6B6B;text-align:right">${(d.gr||0).toFixed(1)}</div>`;
-    html+=`<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:${bal>=0?'#A8E063':'#FF6B6B'};text-align:right">${bal>=0?'+':''}${bal.toFixed(2)}€</div>`;
+    html+=`<div style="font-family:JetBrains Mono,monospace;font-size:9px;color:#5A6785">${dateStr}</div>`;
+    html+=`<div style="font-family:JetBrains Mono,monospace;font-size:9px;color:#F5A623;text-align:right">${(d.pv||0).toFixed(1)}</div>`;
+    html+=`<div style="font-family:JetBrains Mono,monospace;font-size:9px;color:#FF6B6B;text-align:right">${(d.gr||0).toFixed(1)}</div>`;
+    html+=`<div style="font-family:JetBrains Mono,monospace;font-size:9px;color:${bal>=0?'#A8E063':'#FF6B6B'};text-align:right">${bal>=0?'+':''}${bal.toFixed(2)}€</div>`;
     html+='</div>';
   });
   html+='<div style="font-family:\'JetBrains Mono\',monospace;font-size:8px;color:#5A6785;margin-top:8px;text-align:center">kWh · kWh · €</div>';
@@ -1382,28 +1382,28 @@ function renderListaFaturas(){
   }
   let html='<div class="card" style="padding:12px;margin-bottom:12px">';
   html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-bottom:8px">';
-  html+='<div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#5A6785;font-weight:700">MÊS</div>';
-  html+='<div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#FF6B6B;font-weight:700;text-align:right">PAGO</div>';
-  html+='<div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#A8E063;font-weight:700;text-align:right">POUPANÇA</div>';
-  html+='<div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#FFD166;font-weight:700;text-align:right">AMORT.</div>';
+  html+='<div style="font-family:JetBrains Mono,monospace;font-size:8px;color:#5A6785;font-weight:700">MÊS</div>';
+  html+='<div style="font-family:JetBrains Mono,monospace;font-size:8px;color:#FF6B6B;font-weight:700;text-align:right">PAGO</div>';
+  html+='<div style="font-family:JetBrains Mono,monospace;font-size:8px;color:#A8E063;font-weight:700;text-align:right">POUPANÇA</div>';
+  html+='<div style="font-family:JetBrains Mono,monospace;font-size:8px;color:#FFD166;font-weight:700;text-align:right">AMORT.</div>';
   html+='</div>';
   let totalAmort=0;
   fats.forEach(f=>{
     const poup=Math.max(0,MEDIA_ANTES-f.valor);
     totalAmort+=poup;
     html+=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;padding:6px 0;border-top:1px solid rgba(255,255,255,.05)">`;
-    html+=`<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#5A6785">${f.mes}</div>`;
-    html+=`<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#FF6B6B;text-align:right">${f.valor.toFixed(0)}€</div>`;
-    html+=`<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#A8E063;text-align:right">+${poup.toFixed(0)}€</div>`;
-    html+=`<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#FFD166;text-align:right">${totalAmort.toFixed(0)}€</div>`;
+    html+=`<div style="font-family:JetBrains Mono,monospace;font-size:9px;color:#5A6785">${f.mes}</div>`;
+    html+=`<div style="font-family:JetBrains Mono,monospace;font-size:9px;color:#FF6B6B;text-align:right">${f.valor.toFixed(0)}€</div>`;
+    html+=`<div style="font-family:JetBrains Mono,monospace;font-size:9px;color:#A8E063;text-align:right">+${poup.toFixed(0)}€</div>`;
+    html+=`<div style="font-family:JetBrains Mono,monospace;font-size:9px;color:#FFD166;text-align:right">${totalAmort.toFixed(0)}€</div>`;
     html+='</div>';
   });
   html+='</div>';
   // Total
   html+=`<div style="background:linear-gradient(135deg,rgba(255,209,102,.12),rgba(255,209,102,.04));border:1px solid rgba(255,209,102,.3);border-radius:14px;padding:14px;margin-bottom:12px;text-align:center">`;
-  html+=`<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#FFD166;margin-bottom:6px">TOTAL AMORTIZADO VIA FATURAS REAIS</div>`;
+  html+=`<div style="font-family:JetBrains Mono,monospace;font-size:9px;color:#FFD166;margin-bottom:6px">TOTAL AMORTIZADO VIA FATURAS REAIS</div>`;
   html+=`<div style="font-size:28px;font-weight:800;color:#FFD166">${totalAmort.toFixed(0)} €</div>`;
-  html+=`<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#5A6785;margin-top:4px">de 9.340 € · ${(totalAmort/93.4).toFixed(1)}% recuperado</div>`;
+  html+=`<div style="font-family:JetBrains Mono,monospace;font-size:9px;color:#5A6785;margin-top:4px">de 9.340 € · ${(totalAmort/93.4).toFixed(1)}% recuperado</div>`;
   html+='</div>';
   $('fat-lista-content').innerHTML=html;
   // Gráfico comparação
