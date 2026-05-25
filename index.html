@@ -214,7 +214,8 @@ body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);displa
   <div id="lock-form">
     <input id="lock-pwd" type="password" placeholder="Password" autocomplete="current-password">
     <button id="lock-btn">ENTRAR</button>
-    <div id="lock-err"></div><div id="lock-hint"></div>
+    <div id="lock-err"></div>
+    <div id="lock-hint" style="cursor:pointer;color:#4ECDC4;text-decoration:underline" onclick="resetPwd()">Esqueceste a password? Clica aqui para repor</div>
   </div>
 </div>
 
@@ -1762,26 +1763,25 @@ function toggleSeries(chart,idx){if(!chart)return;const ds=chart.data.datasets[i
 
 // ═══════════════════════════════════════════════════════
 // INIT APP
-// ═══════════════════════════════════════════════════════
+// u2550u2550u2550
 async function initApp(){
-  loadSettingsInputs();
-  updateApiStatus();
-  // Sol restante
+  try{ loadSettingsInputs(); }catch(e){ console.warn("loadSettings:",e); }
+  try{ updateApiStatus(); }catch(e){ console.warn("apiStatus:",e); }
   setInterval(()=>{
     const h=new Date().getHours()+new Date().getMinutes()/60;
     const r=Math.max(0,20.75-h);
-    st('sun-h',r>0?r.toFixed(1)+'h':'0h');
-    $('sun-bar').style.width=Math.max(0,Math.min(100,(r/14.75)*100))+'%';
+    st("sun-h",r>0?r.toFixed(1)+"h":"0h");
+    $("sun-bar").style.width=Math.max(0,Math.min(100,(r/14.75)*100))+"%";
   },60000);
-  const em=localStorage.getItem('dy_email');
-  const hash=localStorage.getItem('dy_pwdHash');
+  const em=localStorage.getItem("dy_email");
+  const hash=localStorage.getItem("dy_pwdHash");
   if(em&&hash){
-    if(token&&Date.now()<tokenExp) setStatus('ok','ON-GRID · DADOS REAIS');
-    else{setStatus('warn','A AUTENTICAR...');await getToken(em,hash);}
-  } else setStatus('err','SEM CREDENCIAIS API');
-  fetchAll();
-  liveTimer=setInterval(fetchAll,30000);
-  setInterval(updateApiStatus,60000);
+    if(token&&Date.now()<tokenExp) setStatus("ok","ON-GRID u00b7 DADOS REAIS");
+    else{ setStatus("warn","A AUTENTICAR..."); try{ await getToken(em,hash); }catch(e){} }
+  } else setStatus("err","SEM CREDENCIAIS API");
+  try{ fetchAll(); }catch(e){ console.warn("fetchAll:",e); }
+  liveTimer=setInterval(()=>{ try{ fetchAll(); }catch(e){} },30000);
+  setInterval(()=>{ try{ updateApiStatus(); }catch(e){} },60000);
 }
 
 // START
