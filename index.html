@@ -498,19 +498,23 @@ body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);displa
         <div style="background:var(--card);border:1px solid rgba(78,205,196,.2);border-radius:20px;padding:16px;margin-bottom:12px" id="amor-faturas-section">
           <div style="font-size:9px;font-weight:700;letter-spacing:3px;color:#4ECDC4;font-family:'JetBrains Mono',monospace;margin-bottom:12px">📥 REGISTAR FATURA EDP</div>
           <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#5A6785;margin-bottom:12px">Insere cada fatura recebida para calcular a poupança real vs antes do solar (média ~400€/mês)</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#5A6785;margin-bottom:12px;line-height:1.5">
+            Regista mensalmente os dados da app Deye e da fatura EDP.<br>
+            A <span style="color:#FFD166">Economia Deye</span> é a base do cálculo de amortização.
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
             <div><div style="font-size:9px;color:#5A6785;font-family:'JetBrains Mono',monospace;margin-bottom:4px">MÊS/ANO</div>
               <input id="fat-mes" type="month" style="background:#0A0E1A;border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px;color:#E8EDF5;font-family:'JetBrains Mono',monospace;font-size:12px;width:100%;outline:none"></div>
-            <div><div style="font-size:9px;color:#5A6785;font-family:'JetBrains Mono',monospace;margin-bottom:4px">TOTAL PAGO (€)</div>
-              <input id="fat-valor" type="number" step="0.01" placeholder="ex: 45.20" style="background:#0A0E1A;border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px;color:#E8EDF5;font-family:'JetBrains Mono',monospace;font-size:12px;width:100%;outline:none"></div>
+            <div><div style="font-size:9px;color:#FFD166;font-family:'JetBrains Mono',monospace;margin-bottom:4px">💡 ECONOMIA DEYE (€)</div>
+              <input id="fat-economia" type="number" step="0.01" placeholder="ex: 129.72" style="background:rgba(255,209,102,.06);border:1px solid rgba(255,209,102,.3);border-radius:8px;padding:8px;color:#FFD166;font-family:'JetBrains Mono',monospace;font-size:12px;width:100%;outline:none"></div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-            <div><div style="font-size:9px;color:#5A6785;font-family:'JetBrains Mono',monospace;margin-bottom:4px">kWh VAZIO</div>
-              <input id="fat-vz" type="number" step="0.1" placeholder="ex: 250" style="background:#0A0E1A;border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px;color:#E8EDF5;font-family:'JetBrains Mono',monospace;font-size:12px;width:100%;outline:none"></div>
-            <div><div style="font-size:9px;color:#5A6785;font-family:'JetBrains Mono',monospace;margin-bottom:4px">kWh FORA VAZIO</div>
-              <input id="fat-fv" type="number" step="0.1" placeholder="ex: 150" style="background:#0A0E1A;border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px;color:#E8EDF5;font-family:'JetBrains Mono',monospace;font-size:12px;width:100%;outline:none"></div>
+            <div><div style="font-size:9px;color:#5A6785;font-family:'JetBrains Mono',monospace;margin-bottom:4px">FATURA EDP (€)</div>
+              <input id="fat-valor" type="number" step="0.01" placeholder="ex: 87.09" style="background:#0A0E1A;border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px;color:#E8EDF5;font-family:'JetBrains Mono',monospace;font-size:12px;width:100%;outline:none"></div>
+            <div><div style="font-size:9px;color:#5A6785;font-family:'JetBrains Mono',monospace;margin-bottom:4px">kWh DA REDE</div>
+              <input id="fat-kwh" type="number" step="0.1" placeholder="ex: 249" style="background:#0A0E1A;border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px;color:#E8EDF5;font-family:'JetBrains Mono',monospace;font-size:12px;width:100%;outline:none"></div>
           </div>
-          <button onclick="guardarFatura()" style="width:100%;background:linear-gradient(135deg,rgba(78,205,196,.2),rgba(78,205,196,.05));border:1px solid rgba(78,205,196,.4);color:#4ECDC4;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;padding:12px;border-radius:12px;cursor:pointer">+ GUARDAR FATURA</button>
+          <button onclick="guardarFatura()" style="width:100%;background:linear-gradient(135deg,rgba(255,209,102,.2),rgba(255,209,102,.05));border:1px solid rgba(255,209,102,.4);color:#FFD166;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;padding:12px;border-radius:12px;cursor:pointer">+ GUARDAR</button>
         </div>
 
       </div><!-- /itp-f -->
@@ -1381,16 +1385,21 @@ function fatAll(){
 }
 function guardarFatura(){
   const mes=$('fat-mes').value;
-  const val=parseFloat($('fat-valor').value);
-  const vz =parseFloat($('fat-vz').value)||0;
-  const fv =parseFloat($('fat-fv').value)||0;
-  if(!mes||isNaN(val)||val<=0){ alert('Preenche o mês e o valor total'); return; }
-  const fat={ mes, valor:val, vz, fv, ts:Date.now() };
+  const economia=parseFloat($('fat-economia').value);
+  const val=parseFloat($('fat-valor').value)||0;
+  const kwh=parseFloat($('fat-kwh').value)||0;
+  if(!mes||isNaN(economia)||economia<=0){
+    alert('Preenche o mês e a Economia Deye (€)'); return;
+  }
+  const fat={ mes, economia, valor:val, kwh, ts:Date.now() };
   localStorage.setItem(fatKey(mes),JSON.stringify(fat));
-  $('fat-mes').value='';$('fat-valor').value='';$('fat-vz').value='';$('fat-fv').value='';
-  renderFatura(); // actualizar amortização
-  switchFin('fat'); // ir para lista de faturas
-  alert('✅ Fatura de '+mes+' guardada!');
+  $('fat-mes').value='';
+  $('fat-economia').value='';
+  $('fat-valor').value='';
+  $('fat-kwh').value='';
+  renderFatura();
+  switchFin('fat');
+  alert('✅ '+mes+' guardado! Economia: '+economia.toFixed(2)+'€');
 }
 
 function renderListaFaturas(){
@@ -1811,15 +1820,25 @@ async function initApp(){
 // START
 // Pré-carregar fatura real de Maio 2026
 (function(){
-  const key='fatura_2026-05';
-  if(!localStorage.getItem(key)){
-    localStorage.setItem(key, JSON.stringify({
+  // Pré-carregar dados reais com economia Deye correcta
+  const keyAbr='fatura_2026-04';
+  if(!localStorage.getItem(keyAbr)){
+    localStorage.setItem(keyAbr, JSON.stringify({
+      mes:'2026-04',
+      economia:62.42,   // Economia de Consumo Deye (7 dias, 24-30 Abr)
+      valor:null,       // sem fatura EDP separada (incluída em Maio)
+      kwh:94.5,         // kWh importados da rede
+      ts:Date.now()
+    }));
+  }
+  const keyMai='fatura_2026-05';
+  if(!localStorage.getItem(keyMai)){
+    localStorage.setItem(keyMai, JSON.stringify({
       mes:'2026-05',
-      valor:87.09,      // total pago
-      vz:228,           // kWh vazio
-      fv:21,            // kWh fora vazio
-      ts:Date.now(),
-      nota:'Primeira fatura com solar (23 Abr - 22 Mai 2026)'
+      economia:129.72,  // Economia de Consumo Deye (mês completo)
+      valor:87.09,      // fatura EDP paga
+      kwh:241.95,       // kWh importados da rede
+      ts:Date.now()
     }));
   }
   // Actualizar potência para 13.8 kVA = 1.2756 €/dia
