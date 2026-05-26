@@ -591,7 +591,7 @@ body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);displa
           </div>
           <div class="settings-row">
             <div><div class="settings-row-lbl">Custo potência</div><div class="settings-row-sub">€/dia s/ IVA</div></div>
-            <input class="settings-input" id="s-pot-day" type="number" value="1.3402" step="0.0001">
+            <input class="settings-input" id="s-pot-day" type="number" value="1.2756" step="0.0001">
           </div>
           <div class="settings-row">
             <div><div class="settings-row-lbl">Desconto energia</div><div class="settings-row-sub" id="s-disc-disp">% até —</div></div>
@@ -739,7 +739,7 @@ const T=()=>({
   off:    parseFloat(localStorage.getItem('t_off'))||0.1429,
   peak:   parseFloat(localStorage.getItem('t_peak'))||0.2433,
   sell:   parseFloat(localStorage.getItem('t_sell'))||0.0650,
-  potDay: parseFloat(localStorage.getItem('t_pot_day'))||1.3402,
+  potDay: parseFloat(localStorage.getItem('t_pot_day'))||1.2756,
   disc:   parseFloat(localStorage.getItem('t_disc'))||15,
   discEnd:localStorage.getItem('t_disc_end')||'2026-10-22',
   kva:    parseFloat(localStorage.getItem('t_kva'))||13.8,
@@ -1022,6 +1022,12 @@ async function getToken(email,pwdHash){
 }
 async function ensureToken(){
   if(token&&Date.now()<tokenExp-60000) return true;
+  // Tentar recuperar token guardado
+  const savedTok=localStorage.getItem('dy_token');
+  const savedExp=parseInt(localStorage.getItem('dy_token_exp')||'0');
+  if(savedTok&&Date.now()<savedExp-60000){
+    token=savedTok; tokenExp=savedExp; return true;
+  }
   const em=localStorage.getItem('dy_email')||'';
   const hash=localStorage.getItem('dy_pwdHash')||'';
   if(!em||!hash) return false;
@@ -1030,11 +1036,23 @@ async function ensureToken(){
 function updateApiStatus(){
   const em=localStorage.getItem('dy_email')||'—';
   st('s-email-disp',em);
-  if(token&&Date.now()<tokenExp){
+  // Verificar token guardado
+  const savedTok=localStorage.getItem('dy_token');
+  const savedExp=parseInt(localStorage.getItem('dy_token_exp')||'0');
+  const hasToken=(token&&Date.now()<tokenExp)||(savedTok&&Date.now()<savedExp);
+  if(hasToken){
+    if(!token&&savedTok){ token=savedTok; tokenExp=savedExp; }
     st('s-api-status','Ligado ✅');st('s-api-icon','✅');
-    st('s-token-exp','Expira em '+Math.round((tokenExp-Date.now())/60000)+'min');
+    const exp=Math.max(tokenExp,savedExp);
+    st('s-token-exp','Expira em '+Math.round((exp-Date.now())/60000)+'min');
+    setStatus('ok','ON-GRID · DADOS REAIS');
+  } else if(em&&em!=='—'){
+    st('s-api-status','Token expirado — a renovar...');st('s-api-icon','⏳');st('s-token-exp','—');
+    // Tentar renovar automaticamente
+    const hash=localStorage.getItem('dy_pwdHash')||'';
+    if(hash) getToken(em,hash).then(ok=>{ if(ok) fetchAll(); });
   } else {
-    st('s-api-status','Sem token — configura API');st('s-api-icon','❌');st('s-token-exp','—');
+    st('s-api-status','Sem credenciais — configura API');st('s-api-icon','❌');st('s-token-exp','—');
   }
 }
 
@@ -1116,6 +1134,8 @@ function applyStation(resp){
     renderDay(todPv,todLd,todGr,todEx,null,null);
     window._todayData={pv:todPv||0,ld:todLd||0,gr:todGr||0,ex:todEx||0};
   }
+  // Actualizar gráficos com dados live
+  if(pv!==null) update24hChart(pv||0,load||0,batP||0,wire||0);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1242,6 +1262,8 @@ function recalcDay(pv,ld,gr,ex){
   const diaLabel=dow===0?'Domingo':dow===6?'Sábado':'Dia útil';
   const ver=isVerao(now);
   const periodo=ver?'Verão':'Inverno';
+  const {inicio,fim}=getPeriodoFaturacao(now);
+  const periodoStr=inicio.getDate()+'/'+( inicio.getMonth()+1)+' → '+fim.getDate()+'/'+(fim.getMonth()+1);
   st('d-imp',fkwh(gr));
   st('d-imp-s',diaLabel+' ('+periodo+') · FV: '+fv.toFixed(2)+' · Vazio: '+vz.toFixed(2)+' kWh');
   st('d-imp-c',custoLiq.toFixed(2)+' €');
@@ -1373,7 +1395,10 @@ function guardarFatura(){
 
 function renderListaFaturas(){
   const fats=fatAll();
-  const MEDIA_ANTES=400; // €/mês estimativa antes do solar
+  const MEDIA_ANTES=400; // €/mês média real antes do solar
+  // Dados históricos reais de consumo antes do solar (da fatura EDP)
+  // Out:1984 Nov:2481 Dez:2290 Jan:1854 Fev:1585 Mar:881 (kWh/mês)
+  // Média: ~1845 kWh/mês → ~380€/mês antes do solar
   if(fats.length===0){
     $('fat-lista-content').innerHTML='<div class="no-data"><div class="no-data-icon">🧾</div>Sem faturas registadas.<br>Vai a RETORNO e insere a primeira fatura.</div>';
     $('fat-chart-wrap').style.display='none';
@@ -1674,7 +1699,7 @@ function makeLiveOpts(big){
     responsive:true,maintainAspectRatio:false,
     plugins:{legend:{labels:{color:CD.col,font:big?{family:'JetBrains Mono',size:10}:CD.font,boxWidth:8,padding:big?10:6}}},
     scales:{
-      x:{ticks:{color:CD.col,font:big?{family:'JetBrains Mono',size:10}:CD.font,maxRotation:0,autoSkip:false},grid:{color:CD.grid}},
+      x:{ticks:{color:CD.col,font:big?{family:'JetBrains Mono',size:10}:CD.font,maxRotation:0,autoSkip:true,maxTicksLimit:big?16:8},grid:{color:CD.grid}},
       y:{min:0,max:14,ticks:{color:CD.col,font:big?{family:'JetBrains Mono',size:10}:CD.font,stepSize:2,callback:v=>v+'kW'},grid:{color:CD.grid}}
     }
   };
@@ -1784,6 +1809,25 @@ async function initApp(){
 }
 
 // START
+// Pré-carregar fatura real de Maio 2026
+(function(){
+  const key='fatura_2026-05';
+  if(!localStorage.getItem(key)){
+    localStorage.setItem(key, JSON.stringify({
+      mes:'2026-05',
+      valor:87.09,      // total pago
+      vz:228,           // kWh vazio
+      fv:21,            // kWh fora vazio
+      ts:Date.now(),
+      nota:'Primeira fatura com solar (23 Abr - 22 Mai 2026)'
+    }));
+  }
+  // Actualizar potência para 13.8 kVA = 1.2756 €/dia
+  if(!localStorage.getItem('t_pot_day')){
+    localStorage.setItem('t_pot_day','1.2756');
+    localStorage.setItem('t_kva','13.8');
+  }
+})();
 initLock();
 </script>
 </body>
