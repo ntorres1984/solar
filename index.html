@@ -1146,7 +1146,7 @@ function applyStation(resp){
 // RENDER LIVE
 // ═══════════════════════════════════════════════════════
 function render(pv,load,grid,bat,batP,temp){
-  const PV_MIN=50,BAT_MIN=100,GRID_MIN=50;
+  const PV_MIN=50,BAT_MIN=30,GRID_MIN=5;
   const pvC  =(pv  !==null&&pv  >PV_MIN)?pv:0;
   const batC =(batP!==null&&Math.abs(batP)>BAT_MIN)?batP:0;
   const gridC=(grid!==null&&Math.abs(grid)>GRID_MIN)?grid:0;
@@ -1288,10 +1288,20 @@ function renderFin(){
   if(tab==='d'||!tab){
     const d=window._todayData;
     if(d) recalcDay(d.pv||0,d.ld||0,d.gr||0,d.ex||0);
+    else {
+      // Tentar carregar do Worker directamente se _todayData ainda não chegou
+      fetchTO(CFG.proxy+'/data',{},5000).then(r=>r.json()).then(d=>{
+        if(d.ok&&d.data&&(d.data.pv>0||d.data.ld>0)){
+          const acc=d.data;
+          window._todayData={pv:acc.pv,ld:acc.ld,gr:acc.gr,ex:acc.ex};
+          recalcDay(acc.pv||0,acc.ld||0,acc.gr||0,acc.ex||0);
+        }
+      }).catch(()=>{});
+    }
   }
   if(tab==='h') renderHistorico();
   if(tab==='f') renderFatura();
-  // Sempre renderizar fatura em background para ter amortização actualizada
+  if(tab==='fat') renderListaFaturas();
   setTimeout(()=>{ if(document.querySelector('.itab.on')?.id==='itab-f') renderFatura(); },100);
 }
 
@@ -1522,66 +1532,49 @@ function renderFatura(){
   st('fat-period','Mês actual · '+diasComDados+' dias com dados de '+diasMes);
 
   // ─── AMORTIZAÇÃO ───────────────────────────────────────────
-  // Lógica: poupança real = (custo que tínhamos antes) - (custo actual)
-  //   + receitas UPAC
-  // Consumo histórico antes do solar: ~1960 kWh/mês
-  // Custo médio antes: energia + potência + taxas
+  // Lógica: poupança real = kWh fornecidos pelo solar+bateria × tarifa
+  //   = (consumo_casa - importado_rede) × tarifa_média
+  //   + receitas UPAC (exportado × tarifa_venda)
   const installDate = new Date(t.installDate);
   const diasSistema = Math.max(1, Math.round((now - installDate) / (1000*60*60*24)));
 
-  // Consumo histórico mensal antes do solar (kWh) — dados reais da fatura EDP
-  const histConsumoMensal = parseFloat(localStorage.getItem('s_consumo_hist')) || 1960;
-  // Custo mensal antes do solar (estimativa com tarifas actuais)
-  // Distribuição típica: 60% FV, 40% Vazio
-  const disc2 = desconto();
-  const custoMensalAntes = (histConsumoMensal * 0.60 * t.peak + histConsumoMensal * 0.40 * t.off) * (1-disc2)
-    + t.potDay * 30 * 1.23  // potência c/ IVA
-    + 0.07 * 1.23           // DGEG
-    + histConsumoMensal * 0.001  // IEC
-    + 2.85 * 1.06;          // Audiovisual
-
-  // Poupança acumulada com dados reais
   const histTotal = hist.filter(d => new Date(d.date) >= installDate);
-  let totalSav = 0, totalRev = 0, totalCustoAtual = 0;
+  let totalSav = 0, totalRev = 0;
   histTotal.forEach(d => {
     const date = new Date(d.date);
-    const self = Math.max(0, (d.pv||0) - (d.ex||0));
-    const {fv, vz} = splitVazioFV(d.gr||0, date);
+    const disc2 = desconto();
+    // kWh fornecidos pelo solar+bateria = consumo - importado rede
+    const fornecido = Math.max(0, (d.ld||0) - (d.gr||0));
+    // Tarifa média ponderada (simplificado: tarifa FV para tudo)
+    const tarMedia = t.peak * (1 - disc2);
+    totalSav += fornecido * tarMedia;
+    // Receita UPAC
     totalRev += (d.ex||0) * t.sell;
-    totalSav += self * t.peak * (1-disc2);
-    totalCustoAtual += (fv * t.peak + vz * t.off) * (1-disc2);
   });
 
-  // Se temos dias reais, calcular poupança real; senão estimar por dias
-  const diasComDadosAmor = histTotal.length;
-  let poupancaAcum;
-  if (diasComDadosAmor > 0) {
-    // Poupança real = o que pagávamos antes (pro-rata) - o que pagamos agora + UPAC
-    const custosAntesDias = (custoMensalAntes / 30) * diasComDadosAmor;
-    poupancaAcum = custosAntesDias - totalCustoAtual + totalRev + totalSav;
-  } else {
-    // Sem dados: estimar por dias de sistema
-    poupancaAcum = (custoMensalAntes / 30) * diasSistema * 0.8; // 80% poupança estimada
-  }
-  poupancaAcum = Math.max(0, poupancaAcum);
-
+  const poupancaAcum = Math.max(0, totalSav + totalRev);
   const invest = t.invest;
   const pct = Math.min(100, (poupancaAcum / invest) * 100);
   const falta = Math.max(0, invest - poupancaAcum);
 
-  // Estimar data conclusão com base na poupança mensal real ou estimada
-  const poupancaMs = diasSistema > 0 ? (poupancaAcum / diasSistema) * 30 : custoMensalAntes * 0.8;
+  const diasComDadosAmor = histTotal.length;
+  const poupancaMs = diasComDadosAmor > 0 ? (poupancaAcum / diasComDadosAmor) * 30 : 0;
   let estData = '—';
   if (poupancaMs > 0) {
     const mesesFalta = falta / poupancaMs;
-    if (mesesFalta < 360) { // máx 30 anos
+    if (mesesFalta < 360) {
       const dataEst = new Date(now);
       dataEst.setMonth(dataEst.getMonth() + Math.round(mesesFalta));
       estData = dataEst.toLocaleDateString('pt-PT', {month:'short', year:'numeric'});
     }
   }
 
-  // Preencher amortização
+  // Custo estimado sem solar (para referência)
+  const disc3 = desconto();
+  const histConsumoMensal = parseFloat(localStorage.getItem('s_consumo_hist')) || 1960;
+  const custoMensalAntes = (histConsumoMensal * 0.60 * t.peak + histConsumoMensal * 0.40 * t.off) * (1-disc3)
+    + t.potDay * 30 * 1.23 + 0.07 * 1.23 + histConsumoMensal * 0.001 + 2.85 * 1.06;
+
   st('amor-pct', pct.toFixed(1) + '%');
   st('amor-sub', 'Início: ' + installDate.toLocaleDateString('pt-PT') + ' · ' + diasSistema + ' dias activo');
   $('amor-bar').style.width = pct + '%';
@@ -1590,17 +1583,12 @@ function renderFatura(){
   st('amor-left', falta.toFixed(0) + ' €');
   st('amor-est', estData);
 
-  // Detalhe amortização
-  const custoMensalAtual = diasComDadosAmor > 0 ? (totalCustoAtual / diasComDadosAmor) * 30 : null;
   const amorDetail = $('amor-detail');
   if (amorDetail) {
     const rowStyle = 'display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.05);font-family:\'JetBrains Mono\',monospace;font-size:10px';
     const lastRowStyle = 'display:flex;justify-content:space-between;padding:5px 0;font-family:\'JetBrains Mono\',monospace;font-size:10px';
     let html = '';
     html += `<div style="${rowStyle}"><span style="color:#5A6785">Custo s/ solar/mês</span><span style="color:#FF6B6B">~${custoMensalAntes.toFixed(0)} €</span></div>`;
-    if (custoMensalAtual !== null) {
-      html += `<div style="${rowStyle}"><span style="color:#5A6785">Custo c/ solar/mês</span><span style="color:#A8E063">~${custoMensalAtual.toFixed(0)} €</span></div>`;
-    }
     html += `<div style="${rowStyle}"><span style="color:#5A6785">Poupança/mês</span><span style="color:#FFD166">~${poupancaMs.toFixed(0)} €</span></div>`;
     html += `<div style="${rowStyle}"><span style="color:#5A6785">Receita UPAC</span><span style="color:#A8E063">+${totalRev.toFixed(2)} €</span></div>`;
     html += `<div style="${rowStyle}"><span style="color:#5A6785">Poupança autoconsumo</span><span style="color:#A8E063">+${totalSav.toFixed(2)} €</span></div>`;
@@ -1615,8 +1603,8 @@ function renderFatura(){
 function updateFlow(pvW,ldW,gridW,bat,batP){
   const hasSun=pvW>20,hasLoad=ldW>20;
   // Deye EU: batP negativo=carregar, positivo=descarregar
-  const batChg=batP<-50,batDis=batP>50;
-  const gridImp=gridW>50,gridExp=gridW<-50;
+  const batChg=batP<-30,batDis=batP>30;
+  const gridImp=gridW>5,gridExp=gridW<-5;
   const setPath=(id,on,col)=>{const e=$(id);if(!e)return;e.setAttribute('stroke-opacity',on?'0.85':'0');if(col)e.setAttribute('stroke',col);};
   const setAr=(id,on,col)=>{const e=$(id);if(!e)return;e.setAttribute('opacity',on?'1':'0');if(col)e.setAttribute('fill',col);};
   setPath('fl-sun',hasSun,'#F5A623');
@@ -1712,6 +1700,50 @@ function makeLiveOpts(big){
       y:{min:0,max:14,ticks:{color:CD.col,font:big?{family:'JetBrains Mono',size:10}:CD.font,stepSize:2,callback:v=>v+'kW'},grid:{color:CD.grid}}
     }
   };
+}
+
+async function loadTodayChartFromWorker(){
+  // Carrega histórico intra-dia do Worker para preencher o gráfico desde manhã
+  try{
+    const r=await fetchTO(CFG.proxy+'/today-chart',{},8000);
+    if(r.ok){
+      const d=await r.json();
+      if(d.ok&&d.points&&d.points.length>0){
+        d.points.forEach(p=>{
+          const lbl=p.h+':00';
+          const idx=liveData.lb.indexOf(lbl);
+          if(idx>=0){
+            liveData.pv[idx]=+(Math.min(14,p.pv/1000)).toFixed(2);
+            liveData.ld[idx]=+(Math.min(14,p.ld/1000)).toFixed(2);
+            liveData.bat[idx]=+(p.bat/1000).toFixed(2);
+            liveData.gr[idx]=+(Math.abs(p.wire)/1000).toFixed(2);
+          } else if(p.h>=6&&p.h<=21){
+            liveData.lb.push(lbl);
+            liveData.pv.push(+(Math.min(14,p.pv/1000)).toFixed(2));
+            liveData.ld.push(+(Math.min(14,p.ld/1000)).toFixed(2));
+            liveData.bat.push(+(p.bat/1000).toFixed(2));
+            liveData.gr.push(+(Math.abs(p.wire)/1000).toFixed(2));
+          }
+        });
+        // Ordenar por hora
+        const combined=liveData.lb.map((l,i)=>({l,pv:liveData.pv[i],ld:liveData.ld[i],bat:liveData.bat[i],gr:liveData.gr[i]}));
+        combined.sort((a,b)=>parseInt(a.l)-parseInt(b.l));
+        liveData.lb=combined.map(x=>x.l);
+        liveData.pv=combined.map(x=>x.pv);
+        liveData.ld=combined.map(x=>x.ld);
+        liveData.bat=combined.map(x=>x.bat);
+        liveData.gr=combined.map(x=>x.gr);
+        if(lineChart){
+          lineChart.data.labels=liveData.lb;
+          lineChart.data.datasets[0].data=liveData.pv;
+          lineChart.data.datasets[1].data=liveData.ld;
+          lineChart.data.datasets[2].data=liveData.bat;
+          lineChart.data.datasets[3].data=liveData.gr;
+          lineChart.update('none');
+        }
+      }
+    }
+  }catch(e){ console.warn('[CHART] today-chart:',e.message); }
 }
 
 function updateLiveChart(pvW,ldW,batW,gridW){
@@ -1813,6 +1845,7 @@ async function initApp(){
     else{ setStatus("warn","A AUTENTICAR..."); try{ await getToken(em,hash); }catch(e){} }
   } else setStatus("err","SEM CREDENCIAIS API");
   try{ fetchAll(); }catch(e){ console.warn("fetchAll:",e); }
+  try{ setTimeout(()=>loadTodayChartFromWorker(),2000); }catch(e){}
   liveTimer=setInterval(()=>{ try{ fetchAll(); }catch(e){} },30000);
   setInterval(()=>{ try{ updateApiStatus(); }catch(e){} },60000);
 }
