@@ -215,7 +215,7 @@ body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);displa
     <input id="lock-pwd" type="password" placeholder="Password" autocomplete="current-password">
     <button id="lock-btn">ENTRAR</button>
     <div id="lock-err"></div>
-    <div id="lock-hint" style="cursor:pointer;color:#4ECDC4;text-decoration:underline" onclick="resetPwd()">Esqueceste a password? Clica aqui para repor</div>
+    <div id="lock-hint">Acesso guardado apenas neste dispositivo.</div>
   </div>
 </div>
 
@@ -629,20 +629,14 @@ body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);displa
       </div>
 
       <div class="settings-section">
-        <div class="settings-title">🔑 DEYE CLOUD API</div>
+        <div class="settings-title">🔌 LIGAÇÃO DE DADOS</div>
         <div class="settings-card">
           <div class="settings-row">
-            <div><div class="settings-row-lbl">Estado</div><div class="settings-row-sub" id="s-api-status">A verificar...</div></div>
+            <div><div class="settings-row-lbl">Worker solar</div><div class="settings-row-sub" id="s-api-status">A verificar...</div></div>
             <div style="font-size:20px" id="s-api-icon">⏳</div>
           </div>
-          <div class="settings-row">
-            <div><div class="settings-row-lbl">Email</div><div class="settings-row-sub" id="s-email-disp">—</div></div>
-          </div>
-          <div class="settings-row">
-            <div><div class="settings-row-lbl">Token</div><div class="settings-row-sub" id="s-token-exp">—</div></div>
-          </div>
+          <div class="settings-row"><div class="settings-row-sub">Os dados são fornecidos pelo Worker ligado ao inversor Deye.</div></div>
         </div>
-        <button class="settings-btn" onclick="$('api-modal').style.display='flex'">⚡ CONFIGURAR API</button>
       </div>
 
       <div class="settings-section">
@@ -663,18 +657,6 @@ body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);displa
     <button class="nav-btn"        id="nav-tech"     onclick="navTo('tech')"><span class="nav-icon">📡</span>TÉCNICO</button>
     <button class="nav-btn"        id="nav-settings" onclick="navTo('settings')"><span class="nav-icon">⚙️</span>CONFIG</button>
   </nav>
-</div>
-
-<!-- MODAL API -->
-<div id="api-modal" class="modal">
-  <div class="modal-box" style="border:1px solid rgba(78,205,196,.3)">
-    <div class="modal-hdr"><div class="modal-title">🔌 API Deye Cloud</div><button class="modal-close" onclick="$('api-modal').style.display='none'">✕</button></div>
-    <div class="modal-lbl">EMAIL</div><input id="m-email" class="modal-input">
-    <div class="modal-lbl">PASSWORD DEYE</div><input id="m-pwd" type="password" class="modal-input" placeholder="Password da Deye Cloud">
-    <div style="font-size:9px;color:#5A6785;font-family:'JetBrains Mono',monospace">🔒 Convertida em SHA256 no browser</div>
-    <div id="m-status" class="modal-status"></div>
-    <button class="modal-btn" onclick="doConnect()">⚡ LIGAR</button>
-  </div>
 </div>
 
 <!-- MODAL CHANGE PWD -->
@@ -709,10 +691,7 @@ body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);displa
 // CONFIG
 // ═══════════════════════════════════════════════════════
 const CFG={
-  appId:'202605214003010', secret:'fda694b18c04151a4443e8fde8b48033',
-  baseUrl:'https://eu1-developer.deyecloud.com',
   proxy:'https://lingering-darkness-583a.nuno-jorge-torres.workers.dev',
-  defaultPwd:'solar2024',
   batCap:31.84, // kWh total (2×16kWh Felicity)
   batUsable:0.85, // 85% eficiência
   installDate:'2026-04-24',
@@ -722,9 +701,9 @@ const CFG={
 // ═══════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════
-let token=localStorage.getItem('dy_token')||'';
-let tokenExp=parseInt(localStorage.getItem('dy_token_exp')||'0');
 let liveTimer=null;
+let requestInFlight=false;
+let activeDay='';
 
 // ═══════════════════════════════════════════════════════
 // HELPERS
@@ -825,7 +804,7 @@ function desconto(){
 // ═══════════════════════════════════════════════════════
 function histKey(date){
   const d=date||new Date();
-  return 'hist_'+d.toISOString().split('T')[0];
+  return 'hist_'+[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
 }
 
 function histSave(data){
@@ -834,7 +813,7 @@ function histSave(data){
   // Limpar histórico com mais de 90 dias
   const cutoff=Date.now()-90*24*3600*1000;
   Object.keys(localStorage).filter(k=>k.startsWith('hist_')).forEach(k=>{
-    try{ const d=JSON.parse(localStorage.getItem(k)); if(d.ts<cutoff) localStorage.removeItem(k); }catch(e){}
+    try{ const d=JSON.parse(localStorage.getItem(k)); if(d.ts&&d.ts<cutoff) localStorage.removeItem(k); }catch(e){}
   });
 }
 
@@ -855,10 +834,13 @@ function histAll(){
 // ═══════════════════════════════════════════════════════
 const LOCK_KEY='solar_pwd_hash';
 async function initLock(){
-  // Repor sempre a password para solar2024 para garantir acesso
-  const h=await sha256('solar2024');
-  localStorage.setItem(LOCK_KEY,h);
-  $('lock-hint').innerHTML='Password: <b style="color:#4ECDC4">solar2024</b>';
+  // A antiga password pública era reposta a cada abertura. Obrigar a substituí-la.
+  if(localStorage.getItem(LOCK_KEY)===await sha256('solar2024')) localStorage.removeItem(LOCK_KEY);
+  if(!localStorage.getItem(LOCK_KEY)){
+    $('lock-pwd').placeholder='Criar password (mín. 8 caracteres)';
+    $('lock-btn').textContent='CRIAR ACESSO';
+    $('lock-hint').textContent='Esta password protege apenas o acesso neste navegador.';
+  }
   $('lock-pwd').addEventListener('keydown',e=>{if(e.key==='Enter')tryUnlock();});
   $('lock-btn').onclick=tryUnlock;
 }
@@ -867,6 +849,7 @@ async function tryUnlock(){
   if(!pwd){$('lock-err').textContent='Introduz a password';return;}
   const h=await sha256(pwd);
   const stored=localStorage.getItem(LOCK_KEY);
+  if(!stored&&pwd.length<8){$('lock-err').textContent='Usa pelo menos 8 caracteres';return;}
   if(h===stored||!stored){
     if(!stored) localStorage.setItem(LOCK_KEY,h);
     $('lock').style.display='none';$('app').style.display='flex';initApp();
@@ -877,14 +860,6 @@ async function tryUnlock(){
     setTimeout(()=>{$('lock-pwd').style.borderColor='';$('lock-err').textContent='';},3000);
   }
 }
-async function resetPwd(){
-  const h=await sha256('solar2024');
-  localStorage.setItem(LOCK_KEY,h);
-  $('lock-hint').innerHTML='✅ Reposto! Password: <b style="color:#4ECDC4">solar2024</b>';
-  $('lock-pwd').value='';
-  $('lock-err').textContent='';
-  $('lock-pwd').focus();
-}
 function doLogout(){
   $('app').style.display='none';$('lock').style.display='flex';
   $('lock-pwd').value='';$('lock-err').textContent='';
@@ -894,7 +869,7 @@ async function doChangePwd(){
   const old=$('pwd-old').value,n1=$('pwd-new1').value,n2=$('pwd-new2').value;
   if(!old||!n1||!n2){$('pwd-err').textContent='Preenche todos os campos';return;}
   if(n1!==n2){$('pwd-err').textContent='Passwords não coincidem';return;}
-  if(n1.length<4){$('pwd-err').textContent='Mínimo 4 caracteres';return;}
+  if(n1.length<8){$('pwd-err').textContent='Mínimo 8 caracteres';return;}
   if(await sha256(old)!==localStorage.getItem(LOCK_KEY)){$('pwd-err').textContent='Password actual incorrecta';return;}
   localStorage.setItem(LOCK_KEY,await sha256(n1));
   $('pwd-modal').style.display='none';
@@ -997,149 +972,60 @@ function saveInvest(){
 // ═══════════════════════════════════════════════════════
 // API
 // ═══════════════════════════════════════════════════════
-function mstat(msg,c){$('m-status').textContent=msg;$('m-status').style.color=c==='ok'?'#A8E063':c==='err'?'#FF6B6B':'#4ECDC4';}
-async function doConnect(){
-  const em=$('m-email').value.trim(),pw=$('m-pwd').value;
-  if(!em||!pw){mstat('⚠️ Preenche email e password','err');return;}
-  mstat('🔄 A encriptar...','info');
-  const hash=await sha256(pw);
-  localStorage.setItem('dy_email',em);localStorage.setItem('dy_pwdHash',hash);
-  mstat('🔄 A autenticar...','info');
-  const ok=await getToken(em,hash);
-  if(ok){$('api-modal').style.display='none';fetchAll();updateApiStatus();}
-}
-async function getToken(email,pwdHash){
-  try{
-    const url=CFG.proxy+'?target='+encodeURIComponent(CFG.baseUrl+'/v1.0/account/token?appId='+CFG.appId);
-    const r=await fetchTO(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({appSecret:CFG.secret,email,password:pwdHash})});
-    const d=await r.json();
-    const dat=d.data||d;
-    const tok=dat.accessToken||dat.access_token||d.accessToken;
-    const exp=dat.expiresIn||dat.expires_in||5183999;
-    if(tok){
-      token=tok;tokenExp=Date.now()+(exp*1000);
-      localStorage.setItem('dy_token',token);localStorage.setItem('dy_token_exp',String(tokenExp));
-      mstat('✅ Ligado!','ok');return true;
-    }
-    mstat('❌ '+(d.msg||JSON.stringify(d)),'err');return false;
-  }catch(e){mstat('❌ '+e.message,'err');return false;}
-}
-async function ensureToken(){
-  if(token&&Date.now()<tokenExp-60000) return true;
-  // Tentar recuperar token guardado
-  const savedTok=localStorage.getItem('dy_token');
-  const savedExp=parseInt(localStorage.getItem('dy_token_exp')||'0');
-  if(savedTok&&Date.now()<savedExp-60000){
-    token=savedTok; tokenExp=savedExp; return true;
-  }
-  const em=localStorage.getItem('dy_email')||'';
-  const hash=localStorage.getItem('dy_pwdHash')||'';
-  if(!em||!hash) return false;
-  return getToken(em,hash);
-}
-function updateApiStatus(){
-  const em=localStorage.getItem('dy_email')||'—';
-  st('s-email-disp',em);
-  // Verificar token guardado
-  const savedTok=localStorage.getItem('dy_token');
-  const savedExp=parseInt(localStorage.getItem('dy_token_exp')||'0');
-  const hasToken=(token&&Date.now()<tokenExp)||(savedTok&&Date.now()<savedExp);
-  if(hasToken){
-    if(!token&&savedTok){ token=savedTok; tokenExp=savedExp; }
-    st('s-api-status','Ligado ✅');st('s-api-icon','✅');
-    const exp=Math.max(tokenExp,savedExp);
-    st('s-token-exp','Expira em '+Math.round((exp-Date.now())/60000)+'min');
-    setStatus('ok','ON-GRID · DADOS REAIS');
-  } else if(em&&em!=='—'){
-    st('s-api-status','Token expirado — a renovar...');st('s-api-icon','⏳');st('s-token-exp','—');
-    // Tentar renovar automaticamente
-    const hash=localStorage.getItem('dy_pwdHash')||'';
-    if(hash) getToken(em,hash).then(ok=>{ if(ok) fetchAll(); });
-  } else {
-    st('s-api-status','Sem credenciais — configura API');st('s-api-icon','❌');st('s-token-exp','—');
-  }
-}
-
-// ═══════════════════════════════════════════════════════
-// FETCH
-// ═══════════════════════════════════════════════════════
+// A página só consome telemetria do Worker. Segredos e comandos futuros
+// (iLetComfort/SmartLife) devem ficar num serviço protegido, nunca no HTML público.
 async function fetchTO(url,opts={},ms=8000){
   const ctrl=new AbortController();
   const tid=setTimeout(()=>ctrl.abort(),ms);
-  try{const r=await fetch(url,{...opts,signal:ctrl.signal});clearTimeout(tid);return r;}
-  catch(e){clearTimeout(tid);throw e;}
+  try { return await fetch(url,{...opts,signal:ctrl.signal}); }
+  finally { clearTimeout(tid); }
 }
-
+function localDay(){ return histKey().slice(5); }
+function clearDayCharts(){
+  Object.assign(liveData,{lb:[],pv:[],ld:[],bat:[],gr:[]});
+  for(const k of ['pv','ld','bat','gr']) data24h[k].fill(null);
+  if(lineChart){lineChart.data.labels=[];lineChart.data.datasets.forEach(d=>d.data=[]);lineChart.update('none');}
+  if(chart24h){chart24h.data.datasets.forEach((d,i)=>d.data=[...data24h[['pv','ld','bat','gr'][i]]]);chart24h.update('none');}
+}
 async function fetchAll(){
-  // Tentar Worker KV primeiro
+  if(requestInFlight) return;
+  requestInFlight=true;
   try{
     const r=await fetchTO(CFG.proxy+'/data',{},8000);
-    if(r.ok){
-      const d=await r.json();
-      if(d.ok&&d.data){
-        const acc=d.data;
-        if(acc.pv>0.001||acc.ld>0.001||acc.ex>0.001||acc.bc>0.001){
-          renderDay(acc.pv,acc.ld,acc.gr,acc.ex,acc.bc,acc.bd);
-          window._todayData={pv:acc.pv,ld:acc.ld,gr:acc.gr,ex:acc.ex,bc:acc.bc,bd:acc.bd};
-          // Guardar no histórico local
-          histSave({pv:acc.pv,ld:acc.ld,gr:acc.gr,ex:acc.ex,bc:acc.bc,bd:acc.bd});
-        }
-        if(acc.live&&acc.live.pvW!==null){
-          const lv=acc.live;
-          const age=Math.round((Date.now()-lv.ts)/1000);
-          render(lv.pvW,lv.ldW,lv.wire,lv.bat,lv.batP,lv.temp);
-          setStatus(age>180?'warn':'ok',age>180?'ANTIGO ('+age+'s)':'ON-GRID · DADOS REAIS');
-          st('updated-ts','Act.: '+new Date().toLocaleTimeString('pt-PT'));
-          return;
-        }
-      }
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const response=await r.json(),acc=response.data;
+    if(!response.ok||!acc||!acc.live) throw new Error('Resposta incompleta');
+    const day=localDay();
+    if(activeDay&&activeDay!==day){clearDayCharts();window._todayData=null;}
+    activeDay=day;
+    const sampleTime=Number(acc.live.ts);
+    const age=Date.now()-sampleTime;
+    if(!Number.isFinite(sampleTime)||age < -120000||age > 10*60*1000){
+      setStatus('warn','DADOS ANTIGOS · ÚLTIMA LEITURA '+(sampleTime?new Date(sampleTime).toLocaleTimeString('pt-PT'):'—'));
+      st('s-api-status','Sem dados recentes');
+      st('updated-ts',sampleTime?'Última leitura: '+new Date(sampleTime).toLocaleTimeString('pt-PT'):'—');
+      return;
     }
-  }catch(e){console.warn('[DY] Worker:',e.message);}
-
-  // Fallback API directa
-  if(!await ensureToken()){setStatus('err','SEM CREDENCIAIS — Vai a CONFIG');return;}
-  const appId=CFG.appId;
-  let sid=localStorage.getItem('dy_stationId')||'';
-  if(!sid){
-    try{
-      const r2=await fetchTO(CFG.proxy+'?target='+encodeURIComponent(CFG.baseUrl+'/v1.0/station/list?appId='+appId),
-        {method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:'{}'});
-      const d2=await r2.json();
-      const raw=d2.data?.stationList||d2.stationList||d2.data||[];
-      const arr=Array.isArray(raw)?raw:[];
-      if(arr.length>0){sid=String(arr[0].id||arr[0].stationId||'');if(sid)localStorage.setItem('dy_stationId',sid);}
-    }catch(e){console.warn('[DY] list:',e.message);}
-  }
-  if(sid){
-    try{
-      const r3=await fetchTO(CFG.proxy+'?target='+encodeURIComponent(CFG.baseUrl+'/v1.0/station/latest?appId='+appId),
-        {method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({stationId:sid})});
-      const d3=await r3.json();
-      if(d3&&(d3.code==='1000000'||d3.success!==false)) applyStation(d3);
-    }catch(e){console.warn('[DY] latest:',e.message);}
-  }
-  st('updated-ts','Act.: '+new Date().toLocaleTimeString('pt-PT'));
-}
-
-function applyStation(resp){
-  const d=(resp.data&&typeof resp.data==='object'&&!Array.isArray(resp.data))?resp.data:resp;
-  const pv=num(d.generationPower||d.pvPower||d.pac);
-  const load=num(d.consumptionPower||d.loadPower||d.usePower);
-  const wire=num(d.wirePower||d.gridPower||d.purchasedPower);
-  const bat=num(d.batterySOC||d.batterySoc||d.soc);
-  const batP=num(d.chargePower)??num(d.batteryPower)??null;
-  const temp=num(d.inverterTemperature||d.temperature);
-  render(pv,load,wire,bat,batP,temp);
-  const todPv=num(d.generationValue)??num(d.pvValue)??num(d.dailyGeneration);
-  const todLd=num(d.consumptionValue)??num(d.useValue);
-  const todGr=num(d.buyValue)??num(d.purchaseValue);
-  const todEx=num(d.sellValue)??num(d.wireValue);
-  if(todPv!==null&&todPv>0){
-    renderDay(todPv,todLd,todGr,todEx,null,null);
-    window._todayData={pv:todPv||0,ld:todLd||0,gr:todGr||0,ex:todEx||0};
-  }
-  // Actualizar gráficos com dados live
-  if(pv!==null) update24hChart(pv||0,load||0,batP||0,wire||0);
+    if(acc.day===day){
+      renderDay(acc.pv,acc.ld,acc.gr,acc.ex,acc.bc,acc.bd);
+      window._todayData={pv:acc.pv,ld:acc.ld,gr:acc.gr,ex:acc.ex,bc:acc.bc,bd:acc.bd};
+      histSave(window._todayData);
+    }else{
+      window._todayData=null;
+      for(const id of ['t-pv','t-ld','t-gr','t-ex','t-bc','t-bd']) st(id,'—');
+    }
+    const lv=acc.live;
+    if(lv.pvW!==null && lv.pvW!==undefined){
+      render(lv.pvW,lv.ldW,lv.wire,lv.bat,lv.batP,lv.temp);
+      setStatus(age>180000?'warn':'ok',age>180000?'DADOS COM ATRASO ('+Math.round(age/60000)+' min)':'ON-GRID · DADOS REAIS');
+      st('s-api-status',age>180000?'Dados com atraso':'Ligado ✅');
+      st('updated-ts','Leitura: '+new Date(sampleTime).toLocaleTimeString('pt-PT'));
+    }
+  }catch(e){
+    console.warn('[SOLAR] Worker:',e);
+    setStatus('err','SEM LIGAÇÃO AOS DADOS');
+    st('s-api-status','Sem ligação: '+e.message);
+  }finally{requestInFlight=false;}
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1290,13 +1176,7 @@ function renderFin(){
     if(d) recalcDay(d.pv||0,d.ld||0,d.gr||0,d.ex||0);
     else {
       // Tentar carregar do Worker directamente se _todayData ainda não chegou
-      fetchTO(CFG.proxy+'/data',{},5000).then(r=>r.json()).then(d=>{
-        if(d.ok&&d.data&&(d.data.pv>0||d.data.ld>0)){
-          const acc=d.data;
-          window._todayData={pv:acc.pv,ld:acc.ld,gr:acc.gr,ex:acc.ex};
-          recalcDay(acc.pv||0,acc.ld||0,acc.gr||0,acc.ex||0);
-        }
-      }).catch(()=>{});
+      fetchAll();
     }
   }
   if(tab==='h') renderHistorico();
@@ -1306,22 +1186,25 @@ function renderFin(){
 }
 
 async function renderHistorico(){
-  // Tentar buscar histórico do Worker primeiro
-  let hist=[];
+  renderHistoricoLocal();
+  // Atualizar o histórico remoto sem bloquear os dados locais.
   try{
-    const r=await fetchTO(CFG.proxy+'/history?days=60',{},8000);
+    const r=await fetchTO(CFG.proxy+'/history?days=60',{},15000);
     if(r.ok){
       const d=await r.json();
       if(d.ok&&d.history&&d.history.length>0){
         // Guardar no localStorage local
         d.history.forEach(h=>{
-          if(!localStorage.getItem('hist_'+h.date))
+          if(/^\d{4}-\d{2}-\d{2}$/.test(h.date))
             localStorage.setItem('hist_'+h.date,JSON.stringify(h));
         });
       }
     }
   }catch(e){ console.warn('[HIST] Worker history error:',e.message); }
-  hist=histAll();
+  renderHistoricoLocal();
+}
+function renderHistoricoLocal(){
+  const hist=histAll();
   if(hist.length===0){
     $('hist-content').innerHTML='<div class="no-data"><div class="no-data-icon">📅</div>O histórico acumula dia a dia.<br>Cada dia com dados reais aparece aqui.</div>';
     $('hist-chart-wrap').style.display='none';
@@ -1649,7 +1532,7 @@ let lineChart=null,chart24h=null,bigChart=null,bigChart24=null;
 
 const cjs=document.createElement('script');
 cjs.src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
-cjs.onload=buildAllCharts;
+cjs.onload=()=>{buildAllCharts();loadTodayChartFromWorker();};
 document.head.appendChild(cjs);
 
 function buildAllCharts(){buildLiveChart();build24hChart();}
@@ -1697,7 +1580,7 @@ function makeLiveOpts(big){
     plugins:{legend:{labels:{color:CD.col,font:big?{family:'JetBrains Mono',size:10}:CD.font,boxWidth:8,padding:big?10:6}}},
     scales:{
       x:{ticks:{color:CD.col,font:big?{family:'JetBrains Mono',size:10}:CD.font,maxRotation:0,autoSkip:true,maxTicksLimit:big?16:8},grid:{color:CD.grid}},
-      y:{min:0,max:14,ticks:{color:CD.col,font:big?{family:'JetBrains Mono',size:10}:CD.font,stepSize:2,callback:v=>v+'kW'},grid:{color:CD.grid}}
+      y:{min:-5,max:14,ticks:{color:CD.col,font:big?{family:'JetBrains Mono',size:10}:CD.font,stepSize:2,callback:v=>v+'kW'},grid:{color:CD.grid}}
     }
   };
 }
@@ -1715,14 +1598,14 @@ async function loadTodayChartFromWorker(){
           if(idx>=0){
             liveData.pv[idx]=+(Math.min(14,p.pv/1000)).toFixed(2);
             liveData.ld[idx]=+(Math.min(14,p.ld/1000)).toFixed(2);
-            liveData.bat[idx]=+(p.bat/1000).toFixed(2);
-            liveData.gr[idx]=+(Math.abs(p.wire)/1000).toFixed(2);
+            liveData.bat[idx]=+(p.batP/1000).toFixed(2);
+            liveData.gr[idx]=+(p.wire/1000).toFixed(2);
           } else if(p.h>=6&&p.h<=21){
             liveData.lb.push(lbl);
             liveData.pv.push(+(Math.min(14,p.pv/1000)).toFixed(2));
             liveData.ld.push(+(Math.min(14,p.ld/1000)).toFixed(2));
-            liveData.bat.push(+(p.bat/1000).toFixed(2));
-            liveData.gr.push(+(Math.abs(p.wire)/1000).toFixed(2));
+            liveData.bat.push(+(p.batP/1000).toFixed(2));
+            liveData.gr.push(+(p.wire/1000).toFixed(2));
           }
         });
         // Ordenar por hora
@@ -1733,6 +1616,16 @@ async function loadTodayChartFromWorker(){
         liveData.ld=combined.map(x=>x.ld);
         liveData.bat=combined.map(x=>x.bat);
         liveData.gr=combined.map(x=>x.gr);
+        // Os gráficos técnico e principal mostram a mesma série horária.
+        d.points.forEach(p=>{
+          if(Number.isInteger(p.h)&&p.h>=0&&p.h<24){
+            data24h.pv[p.h]=+(p.pv/1000).toFixed(2);
+            data24h.ld[p.h]=+(p.ld/1000).toFixed(2);
+            data24h.bat[p.h]=+(p.batP/1000).toFixed(2);
+            data24h.gr[p.h]=+(p.wire/1000).toFixed(2);
+          }
+        });
+        if(chart24h){chart24h.data.datasets.forEach((ds,i)=>ds.data=[...data24h[['pv','ld','bat','gr'][i]]]);chart24h.update('none');}
         if(lineChart){
           lineChart.data.labels=liveData.lb;
           lineChart.data.datasets[0].data=liveData.pv;
@@ -1757,13 +1650,13 @@ function updateLiveChart(pvW,ldW,batW,gridW){
     if(pvW!==null) liveData.pv[i]=+(Math.min(14,pvW/1000)).toFixed(2);
     if(ldW!==null) liveData.ld[i]=+(Math.min(14,ldW/1000)).toFixed(2);
     if(batW!==null)liveData.bat[i]=+(batW/1000).toFixed(2);
-    if(gridW!==null)liveData.gr[i]=+(Math.abs(gridW)/1000).toFixed(2);
+    if(gridW!==null)liveData.gr[i]=+(gridW/1000).toFixed(2);
   } else {
     liveData.lb.push(lbl);
     liveData.pv.push(pvW!==null?+(Math.min(14,pvW/1000)).toFixed(2):null);
     liveData.ld.push(ldW!==null?+(Math.min(14,ldW/1000)).toFixed(2):null);
     liveData.bat.push(batW!==null?+(batW/1000).toFixed(2):null);
-    liveData.gr.push(gridW!==null?+(Math.abs(gridW)/1000).toFixed(2):null);
+    liveData.gr.push(gridW!==null?+(gridW/1000).toFixed(2):null);
   }
   lineChart.data.labels=liveData.lb;
   lineChart.data.datasets[0].data=liveData.pv;
@@ -1783,7 +1676,7 @@ function update24hChart(pvW,ldW,batW,gridW){
   if(pvW!==null)  data24h.pv[h]=+(Math.min(14,pvW/1000)).toFixed(2);
   if(ldW!==null)  data24h.ld[h]=+(Math.min(14,ldW/1000)).toFixed(2);
   if(batW!==null) data24h.bat[h]=+(batW/1000).toFixed(2);
-  if(gridW!==null)data24h.gr[h]=+(Math.abs(gridW)/1000).toFixed(2);
+  if(gridW!==null)data24h.gr[h]=+(gridW/1000).toFixed(2);
   chart24h.data.datasets[0].data=[...data24h.pv];
   chart24h.data.datasets[1].data=[...data24h.ld];
   chart24h.data.datasets[2].data=[...data24h.bat];
@@ -1830,24 +1723,11 @@ function toggleSeries(chart,idx){if(!chart)return;const ds=chart.data.datasets[i
 // INIT APP
 // u2550u2550u2550
 async function initApp(){
-  try{ loadSettingsInputs(); }catch(e){ console.warn("loadSettings:",e); }
-  try{ updateApiStatus(); }catch(e){ console.warn("apiStatus:",e); }
-  setInterval(()=>{
-    const h=new Date().getHours()+new Date().getMinutes()/60;
-    const r=Math.max(0,20.75-h);
-    st("sun-h",r>0?r.toFixed(1)+"h":"0h");
-    $("sun-bar").style.width=Math.max(0,Math.min(100,(r/14.75)*100))+"%";
-  },60000);
-  const em=localStorage.getItem("dy_email");
-  const hash=localStorage.getItem("dy_pwdHash");
-  if(em&&hash){
-    if(token&&Date.now()<tokenExp) setStatus("ok","ON-GRID u00b7 DADOS REAIS");
-    else{ setStatus("warn","A AUTENTICAR..."); try{ await getToken(em,hash); }catch(e){} }
-  } else setStatus("err","SEM CREDENCIAIS API");
-  try{ fetchAll(); }catch(e){ console.warn("fetchAll:",e); }
-  try{ setTimeout(()=>loadTodayChartFromWorker(),2000); }catch(e){}
-  liveTimer=setInterval(()=>{ try{ fetchAll(); }catch(e){} },30000);
-  setInterval(()=>{ try{ updateApiStatus(); }catch(e){} },60000);
+  loadSettingsInputs();
+  if(liveTimer) clearInterval(liveTimer);
+  await fetchAll();
+  loadTodayChartFromWorker();
+  liveTimer=setInterval(fetchAll,30000);
 }
 
 // START
