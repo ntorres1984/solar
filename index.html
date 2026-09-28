@@ -151,14 +151,17 @@ button,input,select{font-family:inherit;font-size:inherit;color:inherit}
 .meter>div{height:100%;border-radius:99px;background:var(--c-bat);transition:width .8s ease}
 
 /* ═══ FLUXO ═══ */
-#flow-svg-wrap{max-width:380px;margin:0 auto}
-#flow-svg-wrap>svg{width:100%;height:auto;display:block}
-.f-track{stroke:var(--line-2);stroke-width:2}
-.fn-lbl{font-size:11px;fill:var(--muted)}
-.fn-val{font-size:15px;font-weight:600;fill:var(--text)}
+#flow-svg-wrap{max-width:400px;margin:0 auto}
+#flow-svg-wrap>svg{width:100%;height:auto;display:block;overflow:visible}
+.f-track{stroke:var(--line);stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+.fn-glow{fill:none;stroke-width:9;stroke-opacity:.16;stroke-linecap:round;stroke-linejoin:round}
+.fn-line{fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+#flow-svg-wrap g[id^="ar-"],.fn-node{transition:opacity .4s}
+.fn-inv{fill:var(--card);stroke:var(--brand);stroke-width:2}
+.fn-lbl{font-size:11.5px;fill:var(--muted)}
+.fn-val{font-size:16px;font-weight:700;fill:var(--text);font-variant-numeric:tabular-nums}
 .fn-sub{font-size:10.5px;fill:var(--muted)}
-.fn-line{fill:none;stroke-width:3;stroke-linecap:round;transition:stroke-opacity .4s}
-.fn-node{stroke-width:1.5}
+.legend-row b{color:var(--text);font-weight:600}
 @media (prefers-reduced-motion:reduce){.fdot{display:none}}
 .legend-row{display:flex;justify-content:center;flex-wrap:wrap;gap:6px 14px;margin-top:10px;font-size:12px;color:var(--text-2)}
 .legend-row span{display:inline-flex;align-items:center;gap:6px}
@@ -778,6 +781,7 @@ const ICONS={
   cloud:'<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>',
   trash:'<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
   calendar:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  pylon:'<path d="M7 22 12 3l5 19"/><path d="M4 7h16M5.5 12h13"/><path d="M9.5 12l5.3 6.5M14.5 12l-5.3 6.5"/>',
   inverter:'<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h6"/><path d="m12.5 10-2.5 4h4l-2.5 4"/>',
 };
 function ic(name,cls='ic'){return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]||''}</svg>`;}
@@ -1383,7 +1387,7 @@ function renderLive(){
   if(isNum(L.soc)){
     st('m-bat',nf(L.soc,0));
     $('m-batbar').style.width=clamp(L.soc,0,100)+'%';
-    const bkw=`<div class="muted">${nf(Math.abs(b)/1000,1)} kW</div>`;
+    const bkw=`<div class="muted">${nf(Math.abs(b)/1000,2)} kW</div>`;
     sethtml('m-bat-s',b<0?dirChip('up','A carregar')+bkw:b>0?dirChip('down','A descarregar')+bkw:(L.soc>=99?'Cheia':'Em repouso'));
   }
   if(isNum(L.gridW)){
@@ -1402,72 +1406,78 @@ function renderLive(){
 const dirChip=(icon,txt)=>`<span class="dir">${ic(icon,'ic')}${esc(txt)}</span>`;
 
 // ─── Fluxo de energia (SVG) ───
-const FLOW_PATHS={sun:'ps',bo:'pbo',bi:'pbi',gi:'pgi',go:'pgo',ld:'pld'};
-const FLOW_COLOR={sun:'solar',bo:'bat',bi:'bat',gi:'rede',go:'rede',ld:'casa'};
+// Disposição igual às apps Deye/SOLARMAN: solar e rede em cima, bateria e casa em baixo, inversor ao centro.
+// Cada ligação ativa acende na cor da série, com ponta de seta no destino e pontos a correr no sentido da energia.
+const FLOW_LINKS=[
+  // id do grupo, cor, caminho (sempre no sentido da energia)
+  ['ar-sun','solar','M87,58 H96 Q110,58 110,72 V114 Q110,128 124,128 H139'],
+  ['ar-bat-in','bat','M140,152 H124 Q110,152 110,166 V208 Q110,222 96,222 H89'],
+  ['ar-bat-out','bat','M87,222 H96 Q110,222 110,208 V166 Q110,152 124,152 H139'],
+  ['ar-grd-in','rede','M253,58 H244 Q230,58 230,72 V114 Q230,128 216,128 H201'],
+  ['ar-grd-out','rede','M200,128 H216 Q230,128 230,114 V72 Q230,58 244,58 H251'],
+  ['ar-load','casa','M200,152 H216 Q230,152 230,166 V208 Q230,222 244,222 H251'],
+];
 function buildFlow(){
-  const node=(x,y,kind,icon)=>`<circle class="fn-node" cx="${x}" cy="${y}" r="24" style="fill:var(--t-${kind});stroke:var(--c-${kind})"/>`+
-    `<svg x="${x-11}" y="${y-11}" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="stroke:var(--c-${kind})">${ICONS[icon]}</svg>`;
-  const CHEV={l:'2,-5 -3,0 2,5',r:'-2,-5 3,0 -2,5',d:'-5,-2 0,3 5,-2'};
-  const arrow=(id,x,y,kind,dir)=>`<g id="${id}" opacity="0" transform="translate(${x},${y})"><circle r="10" stroke-width="1.5" style="fill:var(--card);stroke:var(--c-${kind})"/><polyline points="${CHEV[dir]}" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="stroke:var(--c-${kind})"/></g>`;
-  let dots='';
-  for(const [k,p] of Object.entries(FLOW_PATHS)){
-    for(let i=0;i<3;i++) dots+=`<circle class="fdot dot-${k}" r="3.5" style="fill:var(--c-${FLOW_COLOR[k]})" opacity="0"><animateMotion dur="1.5s" repeatCount="indefinite" begin="${(i*0.5).toFixed(2)}s"><mpath href="#${p}"/></animateMotion></circle>`;
-  }
-  $('flow-svg-wrap').innerHTML=`<svg viewBox="0 0 320 250" role="img" aria-label="Fluxo de energia entre solar, bateria, rede e casa">
-  <path id="ps" d="M160,62 L160,101" fill="none"/><path id="pld" d="M160,149 L160,188" fill="none"/>
-  <path id="pbi" d="M136,125 L72,125" fill="none"/><path id="pbo" d="M72,125 L136,125" fill="none"/>
-  <path id="pgi" d="M248,125 L184,125" fill="none"/><path id="pgo" d="M184,125 L248,125" fill="none"/>
-  <g class="f-track" fill="none"><path d="M160,62 L160,101"/><path d="M160,149 L160,188"/><path d="M72,125 L136,125"/><path d="M184,125 L248,125"/></g>
-  <path id="fl-sun" class="fn-line" d="M160,62 L160,101" style="stroke:var(--c-solar)" stroke-opacity="0"/>
-  <path id="fl-load" class="fn-line" d="M160,149 L160,188" style="stroke:var(--c-casa)" stroke-opacity="0"/>
-  <path id="fl-bat" class="fn-line" d="M72,125 L136,125" style="stroke:var(--c-bat)" stroke-opacity="0"/>
-  <path id="fl-grd" class="fn-line" d="M184,125 L248,125" style="stroke:var(--c-rede)" stroke-opacity="0"/>
-  ${dots}
-  ${arrow('ar-sun',160,81,'solar','d')}${arrow('ar-load',160,168,'casa','d')}
-  ${arrow('ar-bat-in',104,125,'bat','l')}${arrow('ar-bat-out',104,125,'bat','r')}
-  ${arrow('ar-grd-in',216,125,'rede','l')}${arrow('ar-grd-out',216,125,'rede','r')}
-  <rect x="136" y="101" width="48" height="48" rx="12" style="fill:var(--card-2);stroke:var(--line-2)" stroke-width="1.5"/>
-  <svg x="148" y="113" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="stroke:var(--text-2)">${ICONS.inverter}</svg>
-  ${node(160,38,'solar','sun')}${node(48,125,'bat','battery')}${node(272,125,'rede','grid')}${node(160,212,'casa','home')}
-  <text x="194" y="32" class="fn-lbl">Solar</text><text x="194" y="50" class="fn-val" id="f-pv">—</text>
-  <text x="194" y="206" class="fn-lbl">Casa</text><text x="194" y="224" class="fn-val" id="f-load">—</text>
-  <text x="48" y="166" class="fn-lbl" text-anchor="middle" id="f-bat-lbl">Bateria</text><text x="48" y="184" class="fn-val" text-anchor="middle" id="f-bat">—</text>
-  <rect x="20" y="192" width="56" height="4" rx="2" style="fill:var(--t-bat)"/><rect id="f-bat-bar" x="20" y="192" width="0" height="4" rx="2" style="fill:var(--c-bat)"/>
-  <text x="272" y="166" class="fn-lbl" text-anchor="middle">Rede</text><text x="272" y="184" class="fn-val" text-anchor="middle" id="f-grid">—</text>
-  <text x="272" y="199" class="fn-sub" text-anchor="middle" id="f-grid-dir"></text>
-  <text x="48" y="210" class="fn-sub" text-anchor="middle" id="f-bat-dir"></text>
-  <text x="176" y="160" class="fn-sub" id="f-temp"></text>
+  const kinds=['solar','bat','rede','casa'];
+  const markers=kinds.map(k=>`<marker id="mk-${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--c-${k})"/></marker>`).join('');
+  const tracks=['M87,58 H96 Q110,58 110,72 V114 Q110,128 124,128 H140','M140,152 H124 Q110,152 110,166 V208 Q110,222 96,222 H87',
+    'M253,58 H244 Q230,58 230,72 V114 Q230,128 216,128 H200','M200,152 H216 Q230,152 230,166 V208 Q230,222 244,222 H253']
+    .map(d=>`<path d="${d}"/>`).join('');
+  const links=FLOW_LINKS.map(([id,k,d])=>`<g id="${id}" opacity="0">
+    <path d="${d}" class="fn-glow" style="stroke:var(--c-${k})"/>
+    <path id="p-${id}" d="${d}" class="fn-line" style="stroke:var(--c-${k})" marker-end="url(#mk-${k})"/>
+    ${[0,1,2].map(i=>`<circle class="fdot" r="3" style="fill:var(--c-${k})"><animateMotion dur="2.1s" begin="${(i*0.7).toFixed(1)}s" repeatCount="indefinite" calcMode="linear"><mpath href="#p-${id}"/></animateMotion></circle>`).join('')}
+  </g>`).join('');
+  const tile=(cx,cy,k,inner)=>`<rect class="fn-tile" x="${cx-29}" y="${cy-29}" width="58" height="58" rx="16" style="fill:var(--t-${k})"/>${inner}`;
+  const icon=(cx,cy,k,name)=>`<svg x="${cx-13}" y="${cy-13}" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="stroke:var(--c-${k})">${ICONS[name]}</svg>`;
+  // Bateria: ícone com o nível de carga preenchido
+  const bateria=`<rect x="43" y="213" width="26" height="18" rx="4" fill="none" stroke-width="2" style="stroke:var(--c-bat)"/>
+    <rect x="70" y="219" width="3" height="6" rx="1" style="fill:var(--c-bat)"/>
+    <rect id="f-bat-bar" x="46" y="216" width="0" height="12" rx="2" style="fill:var(--c-bat)"/>`;
+  const txt=(x,y,cls,id,t='')=>`<text x="${x}" y="${y}" class="${cls}" text-anchor="middle"${id?` id="${id}"`:''}>${t}</text>`;
+  $('flow-svg-wrap').innerHTML=`<svg viewBox="0 20 340 292" role="img" aria-label="Fluxo de energia entre solar, rede, bateria e casa">
+  <defs>${markers}</defs>
+  <g class="f-track" fill="none">${tracks}</g>
+  ${links}
+  <g id="n-solar" class="fn-node">${tile(58,58,'solar',icon(58,58,'solar','sun'))}</g>
+  <g id="n-rede" class="fn-node">${tile(282,58,'rede',icon(282,58,'rede','pylon'))}</g>
+  ${tile(58,222,'bat',bateria)}
+  ${tile(282,222,'casa',icon(282,222,'casa','home'))}
+  <rect class="fn-inv" x="140" y="110" width="60" height="60" rx="16"/>
+  <svg x="156" y="126" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="stroke:var(--brand)">${ICONS.inverter}</svg>
+  ${txt(170,190,'fn-sub','f-temp')}
+  ${txt(58,106,'fn-lbl','','Solar')}${txt(58,125,'fn-val','f-pv','—')}${txt(58,141,'fn-sub','f-pv-sub')}
+  ${txt(282,106,'fn-lbl','','Rede')}${txt(282,125,'fn-val','f-grid','—')}${txt(282,141,'fn-sub','f-grid-dir')}
+  ${txt(58,270,'fn-lbl','f-bat-lbl','Bateria')}${txt(58,289,'fn-val','f-bat','—')}${txt(58,305,'fn-sub','f-bat-dir')}
+  ${txt(282,270,'fn-lbl','','Casa')}${txt(282,289,'fn-val','f-load','—')}${txt(282,305,'fn-sub','','consumo')}
 </svg>`;
 }
 function updateFlow(pv,ld,g,soc,b,temp){
-  if(!$('fl-sun')) buildFlow();
-  const on={sun:pv>20,ld:ld>20,bi:b<-30,bo:b>30,gi:g>5,go:g<-5};
-  const setL=(id,v)=>{const e=$(id);if(e)e.setAttribute('stroke-opacity',v?'1':'0');};
-  setL('fl-sun',on.sun);setL('fl-load',on.ld);setL('fl-bat',on.bi||on.bo);setL('fl-grd',on.gi||on.go);
-  const setA=(id,v)=>{const e=$(id);if(e)e.setAttribute('opacity',v?'1':'0');};
-  setA('ar-sun',on.sun);setA('ar-load',on.ld);setA('ar-bat-in',on.bi);setA('ar-bat-out',on.bo);setA('ar-grd-in',on.gi);setA('ar-grd-out',on.go);
-  for(const k of Object.keys(FLOW_PATHS)) document.querySelectorAll('.dot-'+k).forEach(c=>c.setAttribute('opacity',on[k]?'1':'0'));
+  if(!$('ar-sun')) buildFlow();
+  const on={'ar-sun':pv>20,'ar-load':ld>20,'ar-bat-in':b<-30,'ar-bat-out':b>30,'ar-grd-in':g>5,'ar-grd-out':g<-5};
+  for(const [id,v] of Object.entries(on)){const e=$(id);if(e)e.setAttribute('opacity',v?'1':'0');}
+  // Solar e rede parados ficam esbatidos
+  $('n-solar').style.opacity=on['ar-sun']?'1':'.45';
+  $('n-rede').style.opacity=on['ar-grd-in']||on['ar-grd-out']?'1':'.45';
 
   const kw=w=>nf(Math.abs(w)/1000,2)+' kW';
   st('f-pv',kw(pv));
+  st('f-pv-sub',pv>20?nf(clamp(pv/(CFG.invKw*1000),0,1)*100,0)+'% do inversor':(isNight()?'noite':'sem produção'));
   st('f-load',kw(ld));
   st('f-grid',kw(g));
   st('f-grid-dir',g>5?'a comprar':g<-5?'a exportar':'sem troca');
-  st('f-bat-dir',on.bi?'a carregar':on.bo?'a descarregar':'em repouso');
-  st('f-temp',isNum(temp)?nf(temp,1)+' °C':'');
-  // Bateria como as outras ligações: potência em kW; a carga (%) vai no rótulo e na barra
+  // Bateria como as outras ligações: potência em kW; a carga (%) vai no rótulo e no ícone
   st('f-bat',kw(b));
-  if(isNum(soc)){st('f-bat-lbl','Bateria '+nf(soc,0)+'%');$('f-bat-bar').setAttribute('width',(56*clamp(soc,0,100)/100).toFixed(1));}
+  st('f-bat-dir',b<-30?'a carregar':b>30?'a descarregar':'em repouso');
+  if(isNum(soc)){st('f-bat-lbl','Bateria '+nf(soc,0)+'%');$('f-bat-bar').setAttribute('width',(20*clamp(soc,0,100)/100).toFixed(1));}
+  st('f-temp',isNum(temp)?'Inversor '+nf(temp,1)+' °C':'');
 
-  const item=(k,t)=>`<span><i class="dot" style="background:var(--c-${k})"></i>${esc(t)}</span>`;
-  const leg=[];
-  if(on.sun) leg.push(item('solar','Solar '+nf(pv/1000,2)+' kW'));
-  if(on.bi)  leg.push(item('bat','Bateria ↑ a carregar '+nf(-b/1000,1)+' kW'));
-  if(on.bo)  leg.push(item('bat','Bateria ↓ a descarregar '+nf(b/1000,1)+' kW'));
-  if(on.gi)  leg.push(item('rede','Rede ↓ a comprar '+nf(g/1000,2)+' kW'));
-  if(on.go)  leg.push(item('rede','Rede ↑ a exportar '+nf(-g/1000,2)+' kW'));
-  if(on.ld)  leg.push(item('casa','Casa '+nf(ld/1000,2)+' kW'));
-  sethtml('flow-legend',leg.length?leg.join(''):'<span class="muted">Sem fluxo ativo</span>');
+  // Resumo numa frase: de onde vem e para onde vai a energia agora
+  const lst=a=>a.length>1?a.slice(0,-1).join(', ')+' e '+a[a.length-1]:a[0];
+  const de=[],para=[];
+  if(on['ar-sun'])de.push('solar');if(on['ar-bat-out'])de.push('bateria');if(g>50)de.push('rede');   // rede residual (< 50 W) fica fora da frase
+  if(on['ar-load'])para.push('casa');if(on['ar-bat-in'])para.push('bateria');if(g<-50)para.push('rede');
+  sethtml('flow-legend',de.length&&para.length?`<span>Agora: <b>${esc(lst(de))}</b> → <b>${esc(lst(para))}</b></span>`:'<span class="muted">Sem fluxo ativo</span>');
 }
 
 function renderDaySummary(){
