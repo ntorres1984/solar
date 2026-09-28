@@ -1543,10 +1543,19 @@ function renderBalanco(d){
   st('bal-bat',(saldo>=0?'+':'−')+nf(Math.abs(saldo),1)+' kWh');
   sethtml('bal-bat-leg',[['bat',b.bc,'Entrou (carga)'],['bat',b.bd,'Saiu para a casa (descarga)']]
     .map(p=>`<div><span class="key ${p[0]}"></span>${esc(p[2])}<b>${nf(p[1],1)} kWh</b></div>`).join(''));
-  const t=T(),p0=S.curve&&S.curve.date===todayStr()?S.curve.pts.find(p=>isNum(p.soc)&&p.x<1):null;
+  // Percurso da carga ao longo do dia (curva de 5 min): meia-noite → mínimo → agora
+  const t=T(),sp=S.curve&&S.curve.date===todayStr()?S.curve.pts.filter(p=>isNum(p.soc)):[];
+  const p0=sp.length>3&&sp[0].x<1?sp[0]:null;
+  const pMin=p0?sp.reduce((a,p)=>p.soc<a.soc?p:a,p0):null, pN=sp.length?sp[sp.length-1]:null;
   const partes=[];
-  if(b.bc>0.5) partes.push('Os '+nf(b.bc,1)+' kWh que entraram na bateria não são consumo da casa nem poupança de hoje: só contam quando a casa os gastar (esta noite ou amanhã).');
-  if(b.daBat>0.5) partes.push('Os '+nf(b.daBat,1)+' kWh que a bateria deu à casa'+(p0?' vieram sobretudo da carga de ontem (começou o dia com '+nf(p0.soc,0)+'%, ≈ '+nf(Math.max(0,(p0.soc-t.batMin)/100*t.batCap),1)+' kWh úteis)':' vieram de energia solar guardada antes')+' — contam hoje, uma só vez.');
+  if(p0&&pN) partes.push('Carga da bateria: '+nf(p0.soc,0)+'% à meia-noite'+(pMin.soc<p0.soc-2&&pMin!==pN?' → '+nf(pMin.soc,0)+'% às '+hLabel(pMin.x)+' (mínimo)':'')+' → '+nf(pN.soc,0)+'% às '+hLabel(pN.x)+'.');
+  if(b.daBat>0.5){
+    const noite=p0&&pMin&&pMin.x>p0.x&&pMin.soc<p0.soc?Math.min(b.daBat,(p0.soc-pMin.soc)/100*t.batCap):0;
+    partes.push(noite>0.5
+      ?'Dos '+nf(b.daBat,1)+' kWh que a bateria deu à casa, ≈ '+nf(noite,1)+' kWh foram gastos até às '+hLabel(pMin.x)+' com energia guardada ontem'+(b.daBat-noite>0.3?'; os outros ≈ '+nf(b.daBat-noite,1)+' kWh em momentos com pouco sol.':'.')
+      :'A bateria deu '+nf(b.daBat,1)+' kWh à casa com energia solar guardada antes.');
+  }
+  if(b.bc>0.5) partes.push('Os '+nf(b.bc,1)+' kWh que entraram na bateria não fazem parte dos '+nf(b.ld,1)+' kWh da casa nem da poupança de hoje: contam quando a casa os gastar.');
   st('bal-note',partes.join(' '));
 }
 
