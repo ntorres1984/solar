@@ -946,12 +946,35 @@ function calibrarSinais(rows,origem){
 }
 const sgn=(v,k)=>isNum(v)?v*SIGNS[k]||0:v;
 const fixRows=rows=>rows.map(r=>[r[0],r[1],r[2],sgn(r[3],'g'),sgn(r[4],'b'),r[5]]);
+const DAY_F=['pv','ld','gr','ex','bc','bd'];
 function putDay(ds,d,src){
   const cur=S.days[ds];
-  if(cur&&SRC_RANK[cur.src]>SRC_RANK[src]&&ds!==todayStr()) return false;
-  const n=v=>isNum(v)?+v:null;
-  S.days[ds]={pv:n(d.pv),ld:n(d.ld),gr:n(d.gr),ex:n(d.ex),bc:n(d.bc),bd:n(d.bd),src};
+  // Fonte com menos prioridade só preenche os valores que faltam (ex.: compra à rede do Worker Deye)
+  if(cur&&SRC_RANK[cur.src]>SRC_RANK[src]&&ds!==todayStr()){
+    let ch=false;
+    for(const f of DAY_F) if(!isNum(cur[f])&&isNum(d[f])){cur[f]=+d[f];(cur.fill=cur.fill||{})[f]=src;ch=true;}
+    return ch;
+  }
+  // Valor em falta na fonte nova → mantém o que já havia
+  const nd={src};
+  for(const f of DAY_F){
+    if(isNum(d[f])) nd[f]=+d[f];
+    else if(cur&&isNum(cur[f])){nd[f]=cur[f];if(cur.fill&&cur.fill[f])(nd.fill=nd.fill||{})[f]=cur.fill[f];}
+    else nd[f]=null;
+  }
+  S.days[ds]=nd;
   return true;
+}
+// Dias SOLARMAN sem compra à rede: usa a curva de 5 min (potência da rede integrada)
+function redeDasCurvas(){
+  let n=0;
+  for(const [ds,d] of Object.entries(S.days)){
+    if(!d||d.src!=='sm'||isNum(d.gr)) continue;
+    const b=SLOTS[ds];
+    if(b&&isNum(b.iF)&&isNum(b.iV)){d.gr=Math.round((b.iF+b.iV)*1000)/1000;(d.fill=d.fill||{}).gr='curva';n++;}
+  }
+  if(n){saveDays();AVG=null;}
+  return n;
 }
 const hasDay=d=>d&&isNum(d.ld)&&d.ld>0;
 
@@ -1219,9 +1242,11 @@ function doLogout(){
 // CARREGAMENTO DE DADOS
 // ═══════════════════════════════════════════════════════
 function setToday(d,src){
-  const ds=todayStr();
-  S.today={...d,src,day:ds};
-  putDay(ds,d,src);
+  const ds=todayStr(),dd={...d};
+  // Sem compra à rede no total de hoje → integra a curva de 5 min
+  if(!isNum(dd.gr)&&S.todayBuckets) dd.gr=Math.round((S.todayBuckets.iF+S.todayBuckets.iV)*1000)/1000;
+  S.today={...dd,src,day:ds};
+  putDay(ds,dd,src);
   saveDays();
 }
 
@@ -1314,14 +1339,14 @@ async function loadHistory(force=false){
     }
     // Worker Deye só guarda 90 dias: usado apenas para preencher dias sem dados SOLARMAN
     const need=dateRange(addDays(today,-89),addDays(today,-1))
-      .filter(ds=>ds>=t.installDate&&(!S.days[ds]||S.days[ds].src==='local'));
+      .filter(ds=>ds>=t.installDate&&(!S.days[ds]||S.days[ds].src==='local'||!isNum(S.days[ds].gr)));
     if(need.length||force){
       try{
         const j=await dyGet('/history?days=90',25000);
         for(const h of j.history||[]){ if(h.date!==today&&isIso(h.date)) putDay(h.date,h,'dy'); }
       }catch(e){console.warn('[DY histórico]',e.message);}
     }
-    saveDays();AVG=null;
+    saveDays();AVG=null;redeDasCurvas();
     S.hist.loadedAt=Date.now();S.hist.day=today;
   }finally{S.hist.loading=false;}
   if(S.page==='fin') renderFinTab();
@@ -1344,6 +1369,7 @@ async function startBackfill(){
       const b=Array.isArray(j.rows)&&j.rows.length>=100?bucketsFromRows(fixRows(j.rows)):null;
       SLOTS[ds]=b||{na:1};
       saveSlots();AVG=null;fails=0;
+      if(b&&S.days[ds]&&!isNum(S.days[ds].gr)) redeDasCurvas();
     }catch(e){
       if(e.status===401) break;
       fails++;S.backfill.fail++;
@@ -1614,6 +1640,9 @@ function renderDiag(){
   rows.push(['Dias completos desde a instalação',String(days.length)]);
   rows.push(['Dias com dados','SOLARMAN '+cnt.sm+' · Deye '+cnt.dy+' · local '+cnt.local]);
   rows.push(['Dias sem dados',String(cnt.none),cnt.none?'warn':'ok']);
+  const semRede=days.filter(ds=>hasDay(S.days[ds])&&!isNum(S.days[ds].gr)).length;
+  const daCurva=days.filter(ds=>S.days[ds]&&S.days[ds].fill&&S.days[ds].fill.gr).length;
+  rows.push(['Compra à rede por dia',semRede?semRede+' dias em falta':'completa'+(daCurva?' · '+daCurva+' dias da Deye/curva 5 min':''),semRede?'warn':'ok']);
   rows.push(['Curva 5 min (preço exato)',slots+' / '+days.length+' dias'+(S.backfill.running?' · a descarregar '+S.backfill.done+'/'+Math.min(S.backfill.total,CFG.BACKFILL_MAX):'')]);
   if(S.hist.smErr) rows.push(['Avisos SOLARMAN',S.hist.smErr,'warn']);
   sethtml('diag',rows.map(r=>`<div class="drow"><span>${esc(r[0])}</span><span>${r[2]?`<i class="sdot ${r[2]}"></i>`:''}${esc(r[1])}</span></div>`).join(''));
@@ -1634,7 +1663,10 @@ async function showRaw(){
       'Dispositivo: '+(cur.deviceSn||'—')+' · estado '+(cur.deviceState??'—'),
       'Estações: '+((j.stations||[]).map(x=>x.id+' '+x.name).join(', ')||'—'),
       'Equipamentos: '+((j.devices||[]).map(x=>x.deviceType+' '+x.deviceSn).join(', ')||'—'),
-      j.stationsError?'Erro estações: '+j.stationsError:'', j.currentError?'Erro dados: '+j.currentError:'','',
+      j.stationsError?'Erro estações: '+j.stationsError:'', j.currentError?'Erro dados: '+j.currentError:'',
+      j.dailyDate?'Relatório diário '+j.dailyDate+' · instalação '+(j.stationId??'—')+': '+(j.dailyStation?Object.entries(j.dailyStation).map(([k,v])=>k+'='+v).join(', '):'—'):'',
+      j.dailyDevice?'Relatório diário inversor: '+(j.dailyDevice.map(d=>d.key+'='+d.value).join(', ')||'—'):'',
+      j.dailyError?'Erro relatório diário: '+j.dailyError:'','',
       ...(cur.dataList||[]).map(d=>d.key+' = '+d.value+' '+(d.unit||'')+'  ('+(d.name||'')+')')].filter(x=>x!=='');
     $('raw').textContent=lines.join('\n');
     $('raw').style.display='block';$('btn-raw-copy').style.display='flex';
