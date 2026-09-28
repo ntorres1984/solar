@@ -1,0 +1,1872 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0A0E1A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Solar">
+<title>Solar Híbrido</title>
+<link rel="manifest" href="data:application/json,{&quot;name&quot;:&quot;Solar Híbrido&quot;,&quot;short_name&quot;:&quot;Solar&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;%230A0E1A&quot;,&quot;theme_color&quot;:&quot;%230A0E1A&quot;,&quot;start_url&quot;:&quot;.&quot;}">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --sun:#F5A623;--sun2:#FF6B00;--grid:#4ECDC4;--bat:#A8E063;
+  --load:#C471ED;--bg:#0A0E1A;--bg2:#0F1525;--card:#1A2236;
+  --border:rgba(255,255,255,0.07);--text:#E8EDF5;--muted:#5A6785;
+  --green:#A8E063;--red:#FF6B6B;--euro:#FFD166;--accent:#4ECDC4;
+  --nav-h:64px;--safe-bottom:env(safe-area-inset-bottom,0px);
+  --mono:'JetBrains Mono',ui-monospace,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:var(--bg)}
+body{font-family:'Syne',system-ui,sans-serif;color:var(--text);display:flex;flex-direction:column;overscroll-behavior:none}
+button{font-family:inherit}
+
+/* LOCK */
+#lock{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:32px 16px}
+#lock .logo-icon{width:72px;height:72px;background:linear-gradient(135deg,var(--sun),var(--sun2));border-radius:22px;display:flex;align-items:center;justify-content:center;font-size:36px;box-shadow:0 0 48px rgba(245,166,35,0.5);animation:pulse 3s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 48px rgba(245,166,35,0.4)}50%{box-shadow:0 0 72px rgba(245,166,35,0.7)}}
+#lock h1{font-size:22px;font-weight:800;text-align:center}
+#lock p{font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center}
+#lock-form{display:flex;flex-direction:column;gap:12px;width:100%;max-width:320px}
+#lock-pwd{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 18px;color:var(--text);font-family:var(--mono);font-size:18px;text-align:center;outline:none;letter-spacing:4px;width:100%;transition:border-color .2s}
+#lock-pwd:focus{border-color:rgba(78,205,196,0.5)}
+#lock-btn{background:linear-gradient(135deg,rgba(78,205,196,0.25),rgba(78,205,196,0.08));border:1px solid rgba(78,205,196,0.5);color:var(--accent);font-family:var(--mono);font-size:14px;font-weight:700;padding:15px;border-radius:14px;cursor:pointer;letter-spacing:2px;width:100%}
+#lock-btn:disabled{opacity:.5}
+#lock-err{font-family:var(--mono);font-size:12px;color:var(--red);text-align:center;min-height:16px}
+#lock-hint{font-family:var(--mono);font-size:10px;color:var(--muted);text-align:center;line-height:1.5}
+
+/* APP SHELL */
+#app{display:none;flex-direction:column;height:100%}
+.topbar{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 16px 10px;padding-top:calc(12px + env(safe-area-inset-top,0px));display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.topbar-logo{display:flex;align-items:center;gap:10px}
+.topbar-icon{width:32px;height:32px;background:linear-gradient(135deg,var(--sun),var(--sun2));border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 0 16px rgba(245,166,35,0.4)}
+.topbar-title{font-size:15px;font-weight:800}
+.topbar-sub{font-family:var(--mono);font-size:9px;color:var(--muted)}
+.topbar-right{text-align:right}
+.topbar-time{font-family:var(--mono);font-size:15px;font-weight:500}
+.topbar-date{font-family:var(--mono);font-size:9px;color:var(--muted)}
+.statusbar{padding:6px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;border-bottom:1px solid var(--border);gap:8px}
+.pill{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pill.ok{color:var(--green)}.pill.warn{color:var(--euro)}.pill.err{color:var(--red)}
+.dot{width:6px;height:6px;border-radius:50%;background:currentColor;animation:blink 2s infinite;flex-shrink:0}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.updated{font-family:var(--mono);font-size:9px;color:var(--muted);white-space:nowrap}
+
+/* PAGES */
+.pages{flex:1;overflow:hidden;position:relative}
+.page{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;padding:16px 16px calc(var(--nav-h) + var(--safe-bottom) + 16px);display:none;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.page.active{display:block}
+
+/* NAV */
+.nav{position:fixed;bottom:0;left:0;right:0;z-index:100;background:var(--bg2);border-top:1px solid var(--border);display:flex;align-items:stretch;padding-bottom:var(--safe-bottom);height:calc(var(--nav-h) + var(--safe-bottom))}
+.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;background:none;border:none;color:var(--muted);font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.5px;transition:color .2s;padding:8px 4px;position:relative}
+.nav-btn.active{color:var(--sun)}
+.nav-btn.active::before{content:'';position:absolute;top:0;left:20%;right:20%;height:2px;background:linear-gradient(90deg,transparent,var(--sun),transparent);border-radius:0 0 2px 2px}
+.nav-icon{font-size:20px;line-height:1}
+
+/* CARDS */
+.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:16px;margin-bottom:12px}
+.card-label{font-size:9px;font-weight:700;letter-spacing:3px;color:var(--muted);font-family:var(--mono);margin-bottom:10px}
+.section-title{font-size:10px;font-weight:700;letter-spacing:3px;color:var(--muted);font-family:var(--mono);margin:16px 0 10px;display:flex;align-items:center;gap:10px}
+.section-title::after{content:'';flex:1;height:1px;background:var(--border)}
+.muted{color:var(--muted)}
+.mono{font-family:var(--mono)}
+.small{font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.5}
+
+/* MÉTRICAS */
+.metrics-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.metric{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:16px 14px;position:relative;overflow:hidden;min-width:0}
+.metric::after{content:'';position:absolute;top:-20px;right:-20px;width:60px;height:60px;border-radius:50%;opacity:.08}
+.metric.pv::after{background:var(--sun)}.metric.bat::after{background:var(--bat)}
+.metric.grid::after{background:var(--grid)}.metric.load::after{background:var(--load)}
+.metric-lbl{font-size:9px;font-weight:700;letter-spacing:2px;color:var(--muted);font-family:var(--mono);margin-bottom:6px}
+.metric-val{font-size:28px;font-weight:800;letter-spacing:-1px;line-height:1}
+.metric.pv .metric-val{color:var(--sun)}.metric.bat .metric-val{color:var(--bat)}
+.metric.grid .metric-val{color:var(--grid)}.metric.load .metric-val{color:var(--load)}
+.metric-unit{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px}
+.metric-sub{font-family:var(--mono);font-size:9px;margin-top:6px}
+.batbar{margin-top:8px;background:rgba(255,255,255,0.06);border-radius:100px;height:4px;overflow:hidden}
+.batfill{height:100%;border-radius:100px;background:linear-gradient(90deg,var(--bat),var(--accent));transition:width 1s ease}
+
+/* FLOW SVG */
+.flow-wrap{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:16px 12px;margin-bottom:12px}
+.flow-svg-wrap{width:100%;max-width:360px;margin:0 auto;position:relative;overflow:hidden}
+.flow-svg-wrap svg{width:100%;height:auto;display:block}
+.fn-lbl{font-family:var(--mono);font-size:9px;font-weight:700;fill:#5A6785;letter-spacing:1px;text-anchor:middle}
+.fn-val{font-family:var(--mono);font-weight:600;text-anchor:middle;dominant-baseline:middle}
+.fn-sub{font-family:var(--mono);font-size:8px;text-anchor:middle;fill:#5A6785}
+.legend-row{display:flex;justify-content:center;gap:12px;margin-top:8px;flex-wrap:wrap;font-family:var(--mono);font-size:9px}
+
+/* DAY STATS */
+.day-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.day-stat{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px 12px;min-width:0}
+.day-stat-lbl{font-size:9px;font-weight:700;letter-spacing:2px;color:var(--muted);font-family:var(--mono);margin-bottom:6px}
+.day-stat-val{font-size:21px;font-weight:800}
+
+/* CHART */
+.chart-card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:16px;margin-bottom:12px}
+.chart-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px}
+.chart-lbl{font-size:9px;font-weight:700;letter-spacing:2px;color:var(--muted);font-family:var(--mono)}
+.chart-wrap{height:190px;position:relative}
+.chart-msg{font-family:var(--mono);font-size:9px;color:var(--muted);text-align:center;margin-top:6px}
+.btn-mini{background:rgba(78,205,196,.15);border:1px solid rgba(78,205,196,.3);color:var(--accent);font-family:var(--mono);font-size:9px;padding:5px 10px;border-radius:8px;cursor:pointer;white-space:nowrap}
+.btn-mini:disabled{opacity:.5}
+
+/* FIN */
+.itabs{display:flex;gap:6px;margin-bottom:14px}
+.itab{font-family:var(--mono);font-size:10px;font-weight:700;padding:8px 4px;border-radius:8px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);transition:all .2s;flex:1;text-align:center}
+.itab.on{background:linear-gradient(135deg,rgba(255,209,102,.18),rgba(255,209,102,.05));border-color:rgba(255,209,102,.5);color:var(--euro)}
+.itp{display:none}.itp.on{display:block}
+.seg{display:flex;gap:6px;margin-bottom:12px}
+.seg button{flex:1;font-family:var(--mono);font-size:10px;font-weight:700;padding:7px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer}
+.seg button.on{border-color:rgba(78,205,196,.5);color:var(--accent);background:rgba(78,205,196,.1)}
+.fin-card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:16px;margin-bottom:10px;position:relative;overflow:hidden}
+.fin-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+.fin-card.imp::before{background:linear-gradient(90deg,var(--red),transparent)}
+.fin-card.exp::before{background:linear-gradient(90deg,var(--green),transparent)}
+.fin-card.sav::before{background:linear-gradient(90deg,var(--euro),transparent)}
+.fin-card.bal::before{background:linear-gradient(90deg,var(--accent),transparent)}
+.fin-header{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.fin-icon{font-size:20px}
+.fin-lbl{font-size:9px;font-weight:700;letter-spacing:2px;color:var(--muted);font-family:var(--mono)}
+.fin-kwh{font-size:26px;font-weight:800;margin-bottom:2px}
+.fin-card.imp .fin-kwh{color:var(--red)}.fin-card.exp .fin-kwh{color:var(--green)}
+.fin-card.sav .fin-kwh{color:var(--euro)}.fin-card.bal .fin-kwh{color:var(--accent)}
+.fin-sub{font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:8px;line-height:1.5;white-space:pre-line}
+.fin-row{display:flex;justify-content:space-between;align-items:center;background:var(--bg2);border-radius:10px;padding:9px 12px;margin-top:6px;gap:8px}
+.fin-row-lbl{font-size:10px;color:var(--muted);font-family:var(--mono)}
+.fin-row-val{font-size:15px;font-weight:800;white-space:nowrap}
+.fin-card.imp .fin-row-val{color:var(--red)}.fin-card.exp .fin-row-val{color:var(--green)}
+.fin-card.sav .fin-row-val{color:var(--euro)}.fin-card.bal .fin-row-val{color:var(--accent)}
+.pos{color:var(--green)}.neg{color:var(--red)}.warn-c{color:var(--euro)}
+.no-data{text-align:center;padding:28px 16px;font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.6}
+.no-data-icon{font-size:32px;margin-bottom:10px}
+
+/* TABELAS */
+.tbl{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:10px}
+.tbl th{font-size:8px;color:var(--muted);font-weight:700;letter-spacing:1px;text-align:right;padding:4px 2px 8px}
+.tbl th:first-child,.tbl td:first-child{text-align:left}
+.tbl td{padding:6px 2px;border-top:1px solid rgba(255,255,255,.05);text-align:right;white-space:nowrap}
+.tbl tr.partial td{opacity:.6}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+/* AMORTIZAÇÃO */
+.amor-box{background:linear-gradient(135deg,rgba(255,209,102,.12),rgba(255,209,102,.04));border:1px solid rgba(255,209,102,.3);border-radius:20px;padding:20px 16px;margin-bottom:12px}
+.amor-title{font-size:9px;font-weight:700;letter-spacing:3px;color:var(--euro);font-family:var(--mono);margin-bottom:16px}
+.amor-pct{font-size:56px;font-weight:800;color:var(--euro);line-height:1;text-align:center}
+.amor-bar{background:rgba(255,255,255,.06);border-radius:100px;height:12px;overflow:hidden;margin:14px 0 16px}
+.amor-fill{height:100%;border-radius:100px;background:linear-gradient(90deg,var(--sun),var(--euro));transition:width 1.2s ease;width:0%}
+.kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.kpi{background:rgba(0,0,0,.2);border-radius:12px;padding:12px 10px;text-align:center;min-width:0}
+.kpi-lbl{font-family:var(--mono);font-size:8px;color:var(--muted);letter-spacing:1px;margin-bottom:4px}
+.kpi-val{font-size:18px;font-weight:800}
+.payback{background:rgba(78,205,196,.08);border:1px solid rgba(78,205,196,.25);border-radius:14px;padding:14px;text-align:center;margin-bottom:12px}
+.payback-big{font-size:30px;font-weight:800;color:var(--accent);line-height:1.1}
+.detail-rows{background:rgba(0,0,0,.2);border-radius:12px;padding:6px 12px}
+.drow{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05);font-family:var(--mono);font-size:10px}
+.drow:last-child{border-bottom:none}
+.drow span:first-child{color:var(--muted)}
+.drow span:last-child{text-align:right}
+
+/* FATURA */
+.fat-box{background:var(--card);border:1px solid rgba(255,107,107,.2);border-radius:20px;padding:16px;margin-bottom:12px}
+.fat-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);gap:10px}
+.fat-row:last-child{border-bottom:none}
+.fat-row-lbl{font-size:10px;color:var(--muted);font-family:var(--mono);line-height:1.4}
+.fat-row-val{font-size:12px;font-weight:700;font-family:var(--mono);white-space:nowrap}
+.inv-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px;margin-bottom:10px}
+.inv-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.inv-title{font-size:14px;font-weight:800}
+.btn-del{background:rgba(255,107,107,.1);border:1px solid rgba(255,107,107,.3);color:var(--red);border-radius:8px;font-size:11px;padding:4px 8px;cursor:pointer}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.f-lbl{font-size:9px;color:var(--muted);font-family:var(--mono);margin-bottom:4px}
+.f-in{background:var(--bg);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 8px;color:var(--text);font-family:var(--mono);font-size:13px;width:100%;outline:none;min-width:0}
+.f-in:focus{border-color:rgba(78,205,196,.5)}
+.f-in.invalid{border-color:rgba(255,107,107,.7)}
+
+/* TÉCNICO */
+.tech-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.tech-stat{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px 12px;text-align:center;min-width:0}
+.tech-stat-lbl{font-size:9px;font-weight:700;letter-spacing:2px;color:var(--muted);font-family:var(--mono);margin-bottom:6px}
+.tech-stat-val{font-size:26px;font-weight:800}
+.minibar{margin-top:8px;background:rgba(255,255,255,.06);border-radius:100px;height:4px;overflow:hidden}
+.minibar-fill{height:100%;border-radius:100px;transition:width 1s}
+.alert-item{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.alert-item:last-child{border-bottom:none}
+.alert-icon{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+.alert-icon.ok{background:rgba(168,224,99,.15)}.alert-icon.warn{background:rgba(245,166,35,.15)}.alert-icon.info{background:rgba(78,205,196,.15)}.alert-icon.err{background:rgba(255,107,107,.15)}
+.alert-t{font-size:12px;font-weight:600;margin-bottom:2px}
+.alert-s{font-family:var(--mono);font-size:9px;color:var(--muted);line-height:1.4}
+
+/* SETTINGS */
+.settings-section{margin-bottom:18px}
+.settings-title{font-size:9px;font-weight:700;letter-spacing:3px;color:var(--muted);font-family:var(--mono);margin-bottom:10px}
+.settings-card{background:var(--card);border:1px solid var(--border);border-radius:18px;overflow:hidden}
+.settings-row{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);gap:12px}
+.settings-row:last-child{border-bottom:none}
+.settings-row-lbl{font-size:13px;font-weight:600}
+.settings-row-sub{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px;line-height:1.4}
+.settings-input{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;width:110px;text-align:right;flex-shrink:0}
+.settings-input.wide{width:100%;text-align:left;font-size:11px}
+.settings-input.invalid{border-color:rgba(255,107,107,.7)}
+.settings-btn{width:100%;background:linear-gradient(135deg,rgba(78,205,196,.2),rgba(78,205,196,.05));border:1px solid rgba(78,205,196,.4);color:var(--accent);font-family:var(--mono);font-size:12px;font-weight:700;padding:13px;border-radius:12px;cursor:pointer;letter-spacing:1px;margin-top:10px}
+.settings-btn.danger{background:linear-gradient(135deg,rgba(255,107,107,.15),rgba(255,107,107,.05));border-color:rgba(255,107,107,.4);color:var(--red)}
+.settings-btn.gold{background:linear-gradient(135deg,rgba(255,209,102,.2),rgba(255,209,102,.05));border-color:rgba(255,209,102,.4);color:var(--euro)}
+.settings-btn:disabled{opacity:.5}
+.switch{position:relative;width:44px;height:26px;flex-shrink:0}
+.switch input{opacity:0;width:0;height:0}
+.switch span{position:absolute;inset:0;background:rgba(255,255,255,.1);border-radius:26px;transition:.2s;cursor:pointer}
+.switch span::before{content:'';position:absolute;width:20px;height:20px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}
+.switch input:checked+span{background:var(--accent)}
+.switch input:checked+span::before{transform:translateX(18px)}
+.tar-item{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 16px;border-top:1px solid var(--border);font-family:var(--mono);font-size:10px}
+
+/* TOAST */
+#toast{position:fixed;left:50%;bottom:calc(var(--nav-h) + var(--safe-bottom) + 14px);transform:translateX(-50%) translateY(20px);background:#243049;border:1px solid rgba(255,255,255,.12);color:var(--text);font-family:var(--mono);font-size:11px;padding:10px 14px;border-radius:12px;opacity:0;transition:all .25s;z-index:9997;pointer-events:none;max-width:calc(100% - 32px);text-align:center}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.err{border-color:rgba(255,107,107,.5);color:var(--red)}
+
+/* CHART FULLSCREEN */
+#chart-modal{display:none;position:fixed;inset:0;background:var(--bg);z-index:9990;flex-direction:column;padding:16px;padding-top:calc(16px + env(safe-area-inset-top,0px));padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+</style>
+</head>
+<body>
+
+<!-- LOCK -->
+<div id="lock">
+  <div class="logo-icon">☀️</div>
+  <div><h1>Sistema Solar Híbrido</h1><p>DEYE 12 KW · FELICITY 2×16 KWH</p></div>
+  <form id="lock-form" autocomplete="on">
+    <input id="lock-pwd" type="password" placeholder="Password" autocomplete="current-password" required>
+    <button id="lock-btn" type="submit">ENTRAR</button>
+    <div id="lock-err" role="alert"></div>
+    <div id="lock-hint">A password fica guardada neste dispositivo.</div>
+  </form>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-logo">
+      <div class="topbar-icon">☀️</div>
+      <div><div class="topbar-title">Solar Híbrido</div><div class="topbar-sub">DEYE 12KW · 14,5 KWP · 32 KWH</div></div>
+    </div>
+    <div class="topbar-right">
+      <div class="topbar-time" id="clk">--:--:--</div>
+      <div class="topbar-date" id="dstr"></div>
+    </div>
+  </div>
+  <div class="statusbar">
+    <div class="pill warn" id="status-pill"><div class="dot"></div><span id="status-txt">A LIGAR...</span></div>
+    <div class="updated" id="updated-ts"></div>
+  </div>
+
+  <div class="pages">
+
+    <!-- ═══ LIVE ═══ -->
+    <div class="page active" id="page-live">
+      <div class="metrics-grid">
+        <div class="metric pv">
+          <div class="metric-lbl">☀️ SOLAR</div>
+          <div class="metric-val" id="m-pv">—</div>
+          <div class="metric-unit">kW produção</div>
+          <div class="metric-sub" style="color:var(--sun)" id="m-pv-s">—</div>
+        </div>
+        <div class="metric bat">
+          <div class="metric-lbl">🔋 BATERIA</div>
+          <div class="metric-val" id="m-bat">—</div>
+          <div class="metric-unit" id="m-bat-s">% carga</div>
+          <div class="batbar"><div class="batfill" id="m-batbar" style="width:0%"></div></div>
+        </div>
+        <div class="metric grid">
+          <div class="metric-lbl">🔌 REDE</div>
+          <div class="metric-val" id="m-grid">—</div>
+          <div class="metric-unit" id="m-grid-s">kW</div>
+          <div class="metric-sub muted" id="m-grid-sub">—</div>
+        </div>
+        <div class="metric load">
+          <div class="metric-lbl">🏠 CONSUMO</div>
+          <div class="metric-val" id="m-load">—</div>
+          <div class="metric-unit">kW casa</div>
+          <div class="metric-sub" style="color:var(--load)" id="m-temp">Inversor Deye 12 kW</div>
+        </div>
+      </div>
+
+      <div class="flow-wrap">
+        <div class="card-label">⚡ FLUXO DE ENERGIA</div>
+        <div class="flow-svg-wrap">
+        <svg id="flow-svg" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Fluxo de energia">
+          <line x1="150" y1="76" x2="150" y2="118" stroke="#F5A623" stroke-width="2" stroke-opacity=".12" stroke-dasharray="5,4"/>
+          <line x1="82" y1="150" x2="120" y2="150" stroke="#A8E063" stroke-width="2" stroke-opacity=".12" stroke-dasharray="5,4"/>
+          <line x1="180" y1="150" x2="218" y2="150" stroke="#4ECDC4" stroke-width="2" stroke-opacity=".12" stroke-dasharray="5,4"/>
+          <line x1="150" y1="182" x2="150" y2="224" stroke="#C471ED" stroke-width="2" stroke-opacity=".12" stroke-dasharray="5,4"/>
+          <line id="fl-sun"     x1="150" y1="76"  x2="150" y2="118" stroke="#F5A623" stroke-width="2.5" stroke-opacity="0"/>
+          <line id="fl-bat-out" x1="82"  y1="150" x2="120" y2="150" stroke="#A8E063" stroke-width="2.5" stroke-opacity="0"/>
+          <line id="fl-bat-in"  x1="120" y1="150" x2="82"  y2="150" stroke="#F5A623" stroke-width="2.5" stroke-opacity="0"/>
+          <line id="fl-grd-in"  x1="218" y1="150" x2="180" y2="150" stroke="#FF6B6B" stroke-width="2.5" stroke-opacity="0"/>
+          <line id="fl-grd-out" x1="180" y1="150" x2="218" y2="150" stroke="#A8E063" stroke-width="2.5" stroke-opacity="0"/>
+          <line id="fl-load"    x1="150" y1="182" x2="150" y2="224" stroke="#C471ED" stroke-width="2.5" stroke-opacity="0"/>
+          <polygon id="ar-sun"     points="150,115 143,104 157,104" fill="#F5A623" opacity="0"/>
+          <polygon id="ar-bat-out" points="116,150 105,144 105,156" fill="#A8E063" opacity="0"/>
+          <polygon id="ar-bat-in"  points="86,150 97,144 97,156"   fill="#F5A623" opacity="0"/>
+          <polygon id="ar-grd-in"  points="184,150 195,144 195,156" fill="#FF6B6B" opacity="0"/>
+          <polygon id="ar-grd-out" points="214,150 203,144 203,156" fill="#A8E063" opacity="0"/>
+          <polygon id="ar-load"    points="150,220 143,209 157,209" fill="#C471ED" opacity="0"/>
+
+          <rect x="108" y="16" width="84" height="60" rx="16" fill="rgba(245,166,35,.13)" stroke="#F5A623" stroke-width="1.5"/>
+          <text x="150" y="38" font-size="22" text-anchor="middle" dominant-baseline="middle">☀️</text>
+          <text x="150" y="57" class="fn-lbl">SOLAR</text>
+          <text id="f-pv" x="150" y="69" class="fn-val" font-size="11" fill="#F5A623">— W</text>
+
+          <rect x="120" y="118" width="60" height="64" rx="16" fill="rgba(78,205,196,.18)" stroke="#4ECDC4" stroke-width="2"/>
+          <text x="150" y="140" font-size="22" text-anchor="middle" dominant-baseline="middle">⚡</text>
+          <text x="150" y="160" class="fn-lbl" fill="#4ECDC4">DEYE</text>
+          <text id="f-temp" x="150" y="173" class="fn-val" font-size="9" fill="#4ECDC4">—</text>
+
+          <rect x="4" y="118" width="78" height="64" rx="16" fill="rgba(168,224,99,.13)" stroke="#A8E063" stroke-width="1.5"/>
+          <text x="43" y="138" font-size="20" text-anchor="middle" dominant-baseline="middle">🔋</text>
+          <text x="43" y="155" class="fn-lbl">BATERIA</text>
+          <text id="f-bat" x="43" y="168" class="fn-val" font-size="13" fill="#A8E063">—%</text>
+          <rect x="11" y="174" width="64" height="3" rx="1.5" fill="rgba(255,255,255,.08)"/>
+          <rect id="f-bat-bar" x="11" y="174" width="0" height="3" rx="1.5" fill="#A8E063"/>
+
+          <rect x="218" y="118" width="78" height="64" rx="16" fill="rgba(78,205,196,.10)" stroke="#4ECDC4" stroke-width="1.5"/>
+          <text x="257" y="138" font-size="20" text-anchor="middle" dominant-baseline="middle">🔌</text>
+          <text x="257" y="155" class="fn-lbl">REDE</text>
+          <text id="f-grid" x="257" y="166" class="fn-val" font-size="10" fill="#4ECDC4">— W</text>
+          <text id="f-grid-dir" x="257" y="178" class="fn-sub">—</text>
+
+          <rect x="108" y="224" width="84" height="60" rx="16" fill="rgba(196,113,237,.13)" stroke="#C471ED" stroke-width="1.5"/>
+          <text x="150" y="246" font-size="22" text-anchor="middle" dominant-baseline="middle">🏠</text>
+          <text x="150" y="265" class="fn-lbl">CONSUMO</text>
+          <text id="f-load" x="150" y="277" class="fn-val" font-size="11" fill="#C471ED">— W</text>
+
+          <path id="ps"  d="M150,76 L150,118"  fill="none"/>
+          <path id="pbo" d="M82,150 L120,150"  fill="none"/>
+          <path id="pbi" d="M120,150 L82,150"  fill="none"/>
+          <path id="pgi" d="M218,150 L180,150" fill="none"/>
+          <path id="pgo" d="M180,150 L218,150" fill="none"/>
+          <path id="pld" d="M150,182 L150,224" fill="none"/>
+          <g id="dots"></g>
+        </svg>
+        </div>
+        <div id="flow-legend" class="legend-row"><span class="muted">A aguardar dados...</span></div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-head">
+          <div class="chart-lbl">☀️ HOJE — SOLAR, CONSUMO E BATERIA</div>
+          <button class="btn-mini" onclick="expandChart('today')">↗ EXPANDIR</button>
+        </div>
+        <div class="chart-wrap"><canvas id="ch-today"></canvas></div>
+        <div class="chart-msg" id="today-msg">A carregar curva do dia...</div>
+      </div>
+
+      <div class="section-title">📊 RESUMO DO DIA</div>
+      <div class="day-grid">
+        <div class="day-stat"><div class="day-stat-lbl">☀️ PRODUZIDO</div><div class="day-stat-val" style="color:var(--sun)" id="t-pv">—</div></div>
+        <div class="day-stat"><div class="day-stat-lbl">🏠 CONSUMIDO</div><div class="day-stat-val" style="color:var(--load)" id="t-ld">—</div></div>
+        <div class="day-stat"><div class="day-stat-lbl">⬇️ DA REDE</div><div class="day-stat-val" style="color:var(--red)" id="t-gr">—</div></div>
+        <div class="day-stat"><div class="day-stat-lbl">⬆️ EXPORTADO</div><div class="day-stat-val" style="color:var(--grid)" id="t-ex">—</div></div>
+        <div class="day-stat"><div class="day-stat-lbl">🔋 CARREGADO</div><div class="day-stat-val" style="color:var(--bat)" id="t-bc">—</div></div>
+        <div class="day-stat"><div class="day-stat-lbl">⚡ DESCARREG.</div><div class="day-stat-val" style="color:var(--euro)" id="t-bd">—</div></div>
+      </div>
+      <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div><div class="card-label" style="margin-bottom:4px">💡 POUPADO HOJE</div><div class="small" id="t-sav-s">—</div></div>
+        <div style="font-size:26px;font-weight:800;color:var(--euro);white-space:nowrap" id="t-sav">— €</div>
+      </div>
+    </div>
+
+    <!-- ═══ FINANÇAS ═══ -->
+    <div class="page" id="page-fin">
+      <div class="itabs">
+        <button class="itab on" id="itab-d" onclick="switchFin('d')">HOJE</button>
+        <button class="itab" id="itab-h" onclick="switchFin('h')">HISTÓRICO</button>
+        <button class="itab" id="itab-f" onclick="switchFin('f')">RETORNO</button>
+        <button class="itab" id="itab-fat" onclick="switchFin('fat')">FATURAS</button>
+      </div>
+
+      <!-- HOJE -->
+      <div class="itp on" id="itp-d">
+        <div class="fin-card sav">
+          <div class="fin-header"><span class="fin-icon">💡</span><div class="fin-lbl">ENERGIA SOLAR/BATERIA CONSUMIDA</div></div>
+          <div class="fin-kwh" id="d-sav">— kWh</div>
+          <div class="fin-sub" id="d-sav-s">—</div>
+          <div class="fin-row"><span class="fin-row-lbl">SEM SOLAR CUSTARIA</span><span class="fin-row-val" id="d-sav-c">— €</span></div>
+        </div>
+        <div class="fin-card imp">
+          <div class="fin-header"><span class="fin-icon">⬇️</span><div class="fin-lbl">COMPRADO À REDE</div></div>
+          <div class="fin-kwh" id="d-imp">— kWh</div>
+          <div class="fin-sub" id="d-imp-s">—</div>
+          <div class="fin-row"><span class="fin-row-lbl">CUSTO ENERGIA</span><span class="fin-row-val" id="d-imp-c">— €</span></div>
+        </div>
+        <div class="fin-card exp">
+          <div class="fin-header"><span class="fin-icon">⬆️</span><div class="fin-lbl">EXPORTADO PARA A REDE</div></div>
+          <div class="fin-kwh" id="d-exp">— kWh</div>
+          <div class="fin-sub" id="d-exp-s">—</div>
+          <div class="fin-row"><span class="fin-row-lbl">RECEITA</span><span class="fin-row-val" id="d-exp-c">— €</span></div>
+        </div>
+        <div class="fin-card bal">
+          <div class="fin-header"><span class="fin-icon">🏠</span><div class="fin-lbl">AUTOSSUFICIÊNCIA</div></div>
+          <div class="fin-kwh" id="d-auto">—</div>
+          <div class="fin-sub" id="d-auto-s">—</div>
+          <div class="fin-row"><span class="fin-row-lbl">ENERGIA HOJE: COM SOLAR / SEM SOLAR</span><span class="fin-row-val" id="d-auto-c">—</span></div>
+        </div>
+      </div>
+
+      <!-- HISTÓRICO -->
+      <div class="itp" id="itp-h">
+        <div class="seg">
+          <button id="seg-d" class="on" onclick="setHistMode('d')">DIÁRIO · 30 DIAS</button>
+          <button id="seg-m" onclick="setHistMode('m')">MENSAL</button>
+        </div>
+        <div class="chart-card" id="hist-chart-wrap">
+          <div class="chart-head"><div class="chart-lbl" id="hist-chart-lbl">CONSUMO E POUPANÇA</div></div>
+          <div class="chart-wrap"><canvas id="ch-hist"></canvas></div>
+        </div>
+        <div class="card" style="padding:12px"><div class="tbl-wrap" id="hist-table"></div></div>
+        <div class="small" id="hist-src" style="text-align:center;margin-bottom:10px">—</div>
+        <button class="settings-btn" onclick="exportCSV()">⬇ EXPORTAR CSV (TODOS OS DIAS)</button>
+      </div>
+
+      <!-- RETORNO -->
+      <div class="itp" id="itp-f">
+        <div class="amor-box">
+          <div class="amor-title">🏦 RETORNO DO INVESTIMENTO</div>
+          <div class="amor-pct" id="amor-pct">—</div>
+          <div class="small" style="text-align:center;margin-top:4px" id="amor-sub">—</div>
+          <div class="amor-bar"><div class="amor-fill" id="amor-bar"></div></div>
+          <div class="kpi-grid">
+            <div class="kpi"><div class="kpi-lbl">INVESTIDO</div><div class="kpi-val" id="amor-total">—</div></div>
+            <div class="kpi" style="border:1px solid rgba(168,224,99,.15)"><div class="kpi-lbl" style="color:var(--bat)">RECUPERADO</div><div class="kpi-val pos" id="amor-done">—</div></div>
+            <div class="kpi" style="border:1px solid rgba(255,107,107,.15)"><div class="kpi-lbl" style="color:var(--red)">FALTA</div><div class="kpi-val neg" id="amor-left">—</div></div>
+            <div class="kpi" style="border:1px solid rgba(78,205,196,.15)"><div class="kpi-lbl" style="color:var(--accent)">MÉDIA / DIA</div><div class="kpi-val" style="color:var(--accent)" id="amor-avg">—</div></div>
+          </div>
+          <div class="payback">
+            <div class="kpi-lbl" style="color:var(--accent)">⏳ INVESTIMENTO PAGO DAQUI A</div>
+            <div class="payback-big" id="amor-days">—</div>
+            <div class="small" id="amor-date">—</div>
+          </div>
+          <div class="detail-rows" id="amor-detail"></div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-head"><div class="chart-lbl">📈 POUPANÇA ACUMULADA vs INVESTIMENTO</div></div>
+          <div class="chart-wrap"><canvas id="ch-amor"></canvas></div>
+        </div>
+
+        <div class="fat-box">
+          <div class="card-label" style="color:var(--red)">🧾 FATURA EDP — CICLO ATUAL</div>
+          <div style="font-size:34px;font-weight:800;color:var(--red)" id="fat-total">— €</div>
+          <div class="small" style="margin-bottom:10px" id="fat-period">—</div>
+          <div id="fat-rows"></div>
+        </div>
+      </div>
+
+      <!-- FATURAS -->
+      <div class="itp" id="itp-fat">
+        <div class="card" style="border-color:rgba(78,205,196,.2)">
+          <div class="card-label" style="color:var(--accent)">📥 REGISTAR FATURA EDP</div>
+          <div class="small" style="margin-bottom:12px">Serve para validar a app: compara os kWh e o valor da fatura (ciclo 23→22) com o que a app mediu, e a "Economia" da app Deye (mês civil) com a poupança calculada aqui.</div>
+          <form id="fat-form" novalidate>
+            <div class="form-grid">
+              <div><div class="f-lbl">MÊS DA FATURA</div><input id="fat-mes" class="f-in" type="month" required></div>
+              <div><div class="f-lbl">VALOR FATURA (€)</div><input id="fat-valor" class="f-in" type="number" step="0.01" min="0" inputmode="decimal" placeholder="87.09"></div>
+            </div>
+            <div class="form-grid">
+              <div><div class="f-lbl">kWh DA REDE (FATURA)</div><input id="fat-kwh" class="f-in" type="number" step="0.1" min="0" inputmode="decimal" placeholder="249"></div>
+              <div><div class="f-lbl" style="color:var(--euro)">ECONOMIA APP DEYE (€)</div><input id="fat-economia" class="f-in" type="number" step="0.01" min="0" inputmode="decimal" placeholder="129.72"></div>
+            </div>
+            <div id="fat-err" class="small" style="color:var(--red);min-height:14px"></div>
+            <button type="submit" class="settings-btn gold" style="margin-top:4px">+ GUARDAR FATURA</button>
+          </form>
+        </div>
+        <div id="fat-list"></div>
+        <div class="chart-card" id="fat-chart-wrap" style="display:none">
+          <div class="chart-head"><div class="chart-lbl">FATURA EDP vs ESTIMATIVA DA APP (€)</div></div>
+          <div class="chart-wrap"><canvas id="ch-fat"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ TÉCNICO ═══ -->
+    <div class="page" id="page-tech">
+      <div class="tech-grid">
+        <div class="tech-stat">
+          <div class="tech-stat-lbl">☀️ SOL RESTANTE</div>
+          <div class="tech-stat-val" style="color:var(--sun)" id="sun-h">—</div>
+          <div class="minibar"><div class="minibar-fill" id="sun-bar" style="background:linear-gradient(90deg,var(--sun),var(--sun2));width:0%"></div></div>
+          <div class="small" style="margin-top:6px" id="sun-sub">—</div>
+        </div>
+        <div class="tech-stat">
+          <div class="tech-stat-lbl" id="auto-lbl">🔋 AUTONOMIA</div>
+          <div class="tech-stat-val" style="color:var(--bat)" id="auto-h">—</div>
+          <div class="minibar"><div class="minibar-fill" id="auto-bar" style="background:linear-gradient(90deg,var(--bat),var(--accent));width:0%"></div></div>
+          <div class="small" style="margin-top:6px" id="auto-sub">—</div>
+        </div>
+        <div class="tech-stat" style="grid-column:1/-1">
+          <div class="tech-stat-lbl">🌡️ TEMPERATURA INVERSOR</div>
+          <div class="tech-stat-val" style="color:var(--accent)" id="temp-big">—</div>
+          <div class="small" id="temp-sub">Normal &lt; 65 °C</div>
+          <div class="minibar"><div class="minibar-fill" id="temp-bar" style="background:linear-gradient(90deg,var(--accent),var(--sun));width:0%"></div></div>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-head">
+          <div class="chart-lbl">🔋 HOJE — BATERIA E REDE (kW)</div>
+          <button class="btn-mini" onclick="expandChart('tech')">↗</button>
+        </div>
+        <div class="chart-wrap"><canvas id="ch-tech"></canvas></div>
+        <div class="chart-msg">Bateria: + descarga / − carga · Rede: + compra / − venda</div>
+      </div>
+
+      <div class="card">
+        <div class="card-label">📡 ALERTAS E ESTADO</div>
+        <div id="alerts"><div class="alert-item"><div class="alert-icon info">⏳</div><div><div class="alert-t">A aguardar dados</div><div class="alert-s">A ligar aos Workers...</div></div></div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-label">🧪 DIAGNÓSTICO DE DADOS</div>
+        <div class="detail-rows" id="diag"></div>
+        <button class="settings-btn" id="btn-raw" onclick="showRaw()">🔍 VER DADOS BRUTOS SOLARMAN</button>
+        <pre id="raw" style="display:none;margin-top:10px;max-height:320px;overflow:auto;background:var(--bg);border-radius:10px;padding:10px;font-family:var(--mono);font-size:9px;color:var(--muted);white-space:pre-wrap;word-break:break-all"></pre>
+        <button class="settings-btn" id="btn-raw-copy" style="display:none" onclick="copyRaw()">📋 COPIAR</button>
+      </div>
+    </div>
+
+    <!-- ═══ CONFIG ═══ -->
+    <div class="page" id="page-settings">
+      <div class="settings-section">
+        <div class="settings-title">⚡ TARIFA EDP (PREÇOS SEM IVA)</div>
+        <div class="settings-card">
+          <div class="settings-row">
+            <div><div class="settings-row-lbl">Tipo de tarifa</div><div class="settings-row-sub">Ciclo semanal EDP</div></div>
+            <select class="settings-input" id="s-modo" onchange="toggleModo()" style="width:140px;text-align:left"><option value="bi">Bi-horária</option><option value="simples">Simples</option></select>
+          </div>
+          <div class="settings-row bi-only">
+            <div><div class="settings-row-lbl">Fora Vazio</div><div class="settings-row-sub" id="s-peak-disp">€/kWh</div></div>
+            <input class="settings-input" id="s-peak-net" type="number" step="0.0001" min="0" inputmode="decimal">
+          </div>
+          <div class="settings-row bi-only">
+            <div><div class="settings-row-lbl">Vazio</div><div class="settings-row-sub" id="s-off-disp">€/kWh</div></div>
+            <input class="settings-input" id="s-off-net" type="number" step="0.0001" min="0" inputmode="decimal">
+          </div>
+          <div class="settings-row simples-only">
+            <div><div class="settings-row-lbl">Simples</div><div class="settings-row-sub" id="s-simples-disp">€/kWh</div></div>
+            <input class="settings-input" id="s-simples-net" type="number" step="0.0001" min="0" inputmode="decimal">
+          </div>
+          <div class="settings-row">
+            <div><div class="settings-row-lbl">Válida desde</div><div class="settings-row-sub">Mudanças de preço não alteram dias anteriores</div></div>
+            <input class="settings-input" id="s-valid-from" type="date" style="width:140px">
+          </div>
+          <div id="tar-list"></div>
+        </div>
+        <button class="settings-btn gold" onclick="saveTarifa()">💾 GUARDAR TARIFA</button>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-title">🧾 CONTRATO</div>
+        <div class="settings-card">
+          <div class="settings-row">
+            <div><div class="settings-row-lbl">Desconto energia</div><div class="settings-row-sub">%</div></div>
+            <input class="settings-input" id="s-disc" type="number" step="1" min="0" max="100">
+          </div>
+          <div class="settings-row">
+            <div><div class="settings-row-lbl">Fim do desconto</div><div class="settings-row-sub">inclusive</div></div>
+            <input class="settings-input" id="s-disc-end" type="date" style="width:140px">
+          </div>
+          <div class="settings-row">
+            <div><div class="settings-row-lbl">Potência contratada</div><div class="settings-row-sub">kVA</div></div>
+            <input class="settings-input" id="s-kva" type="number" step="0.01" min="0">
+          </div>
+          <div class="settings-row">
+            <div><div class="settings-row-lbl">Custo potência</div><div class="settings-row-sub">€/dia sem IVA</div></div>
+            <input class="settings-input" id="s-pot-day" type="number" step="0.0001" min="0">
+          </div>
+          <div class="settings-row">
+            <div><div class="settings-row-lbl">Contrato UPAC</div><div class="settings-row-sub">Venda do excedente à rede</div></div>
+            <label class="switch"><input type="checkbox" id="s-upac"><span></span></label>
+          </div>
+          <div class="settings-row">
+            <div><div class="settings-row-lbl">Preço venda UPAC</div><div class="settings-row-sub">€/kWh</div></div>
+            <input class="settings-input" id="s-sell" type="number" step="0.001" min="0">
+          </div>
+        </div>
+        <button class="settings-btn gold" onclick="saveContrato()">💾 GUARDAR CONTRATO</button>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-title">🏦 INVESTIMENTO E BATERIA</div>
+        <div class="settings-card">
+          <div class="settings-row">
+            <div><div class="settings-row-lbl">Total investido</div><div class="settings-row-sub">€</div></div>
+            <input class="settings-input" id="s-invest" type="number" step="10" min="0">
+          </div>
+          <div class="settings-row">
+            <div><div class="settings-row-lbl">Data instalação</div><div class="settings-row-sub">início da amortização</div></div>
+            <input class="settings-input" id="s-install-date" type="date" style="width:140px">
+          </div>
+          <div class="settings-row">
+            <div><div class="settings-row-lbl">Capacidade bateria</div><div class="settings-row-sub">kWh</div></div>
+            <input class="settings-input" id="s-bat-cap" type="number" step="0.01" min="1">
+          </div>
+          <div class="settings-row">
+            <div><div class="settings-row-lbl">Descarga mínima</div><div class="settings-row-sub">% SOC em que o inversor para</div></div>
+            <input class="settings-input" id="s-bat-min" type="number" step="1" min="0" max="90">
+          </div>
+        </div>
+        <button class="settings-btn gold" onclick="saveInvest()">💾 GUARDAR</button>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-title">🔌 LIGAÇÕES</div>
+        <div class="settings-card">
+          <div class="settings-row" style="flex-direction:column;align-items:stretch">
+            <div><div class="settings-row-lbl">Worker SOLARMAN</div><div class="settings-row-sub" id="s-sm-status">—</div></div>
+            <input class="settings-input wide" id="s-sm-url" type="url" placeholder="https://....workers.dev" autocapitalize="off" spellcheck="false">
+          </div>
+          <div class="settings-row">
+            <div><div class="settings-row-lbl">Worker Deye (fallback)</div><div class="settings-row-sub" id="s-dy-status">—</div></div>
+          </div>
+        </div>
+        <button class="settings-btn" id="btn-test" onclick="testConnections()">⚡ GUARDAR E TESTAR LIGAÇÕES</button>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-title">🗂 DADOS E SESSÃO</div>
+        <button class="settings-btn" onclick="exportCSV()">⬇ EXPORTAR CSV DIÁRIO</button>
+        <button class="settings-btn" onclick="resyncHistory()">↻ RESINCRONIZAR HISTÓRICO</button>
+        <button class="settings-btn danger" onclick="doLogout()">🚪 SAIR NESTE DISPOSITIVO</button>
+        <div class="small" style="text-align:center;margin-top:10px">A password da app é o secret <b>APP_KEY</b> do Worker SOLARMAN.</div>
+      </div>
+    </div>
+
+  </div><!-- /pages -->
+
+  <nav class="nav">
+    <button class="nav-btn active" id="nav-live"     onclick="navTo('live')"><span class="nav-icon">⚡</span>LIVE</button>
+    <button class="nav-btn"        id="nav-fin"      onclick="navTo('fin')"><span class="nav-icon">💶</span>FINANÇAS</button>
+    <button class="nav-btn"        id="nav-tech"     onclick="navTo('tech')"><span class="nav-icon">📡</span>TÉCNICO</button>
+    <button class="nav-btn"        id="nav-settings" onclick="navTo('settings')"><span class="nav-icon">⚙️</span>CONFIG</button>
+  </nav>
+</div>
+
+<div id="chart-modal">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div class="chart-lbl" style="color:var(--accent)" id="big-title">HOJE</div>
+    <button onclick="closeChart()" class="btn-mini" style="font-size:12px;padding:8px 14px">✕ FECHAR</button>
+  </div>
+  <div style="flex:1;position:relative;min-height:0"><canvas id="ch-big"></canvas></div>
+  <div class="chart-msg">Toca na legenda para mostrar/esconder séries</div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+// ═══════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════
+const CFG={
+  smProxy:'https://solar-solarman.nuno-jorge-torres.workers.dev', // Worker SOLARMAN (editável em CONFIG)
+  dyProxy:'https://lingering-darkness-583a.nuno-jorge-torres.workers.dev', // Worker Deye (fallback)
+  lat:41.2357, lon:-8.6199,        // Maia
+  invKw:12,                        // inversor Deye 12 kW
+  cicloDia:23,                     // ciclo de faturação EDP: 23 → 22
+  IVA:1.23, IEC:0.001, DGEG:0.07, CAV:2.85*1.06,
+  LIVE_MS:60000, CURVE_MS:5*60000, HIST_MS:30*60000,
+  BACKFILL_MAX:60, BACKFILL_GAP_MS:700,
+  SM_RETRY_MS:10*60000,
+};
+
+// ═══════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════
+const $=id=>document.getElementById(id);
+const st=(id,v)=>{const e=$(id);if(e)e.textContent=v;};
+const sethtml=(id,v)=>{const e=$(id);if(e)e.innerHTML=v;};
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const isNum=v=>typeof v==='number'&&Number.isFinite(v);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const nf=(v,d=1)=>isNum(v)?v.toLocaleString('pt-PT',{minimumFractionDigits:d,maximumFractionDigits:d}):'—';
+const eur=(v,d=2)=>isNum(v)?nf(v,d)+' €':'— €';
+const fkwh=(v,d=1)=>isNum(v)?nf(v,d)+' kWh':'— kWh';
+const fkw=w=>isNum(w)?nf(w/1000,2):'—';
+const hm=d=>d.toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'});
+
+function lsGet(k,def=null){try{const v=localStorage.getItem(k);return v===null?def:v;}catch(e){return def;}}
+function lsSet(k,v){try{localStorage.setItem(k,v);return true;}catch(e){console.warn('[LS]',k,e.message);return false;}}
+function lsDel(k){try{localStorage.removeItem(k);}catch(e){}}
+function lsJSON(k,def){try{const v=localStorage.getItem(k);return v?JSON.parse(v):def;}catch(e){return def;}}
+function lsKeys(){try{return Object.keys(localStorage);}catch(e){return [];}}
+function numSetting(k,def){const v=parseFloat(lsGet(k));return Number.isFinite(v)?v:def;}
+
+let toastT=null;
+function toast(msg,err=false){const t=$('toast');t.textContent=msg;t.className='show'+(err?' err':'');clearTimeout(toastT);toastT=setTimeout(()=>{t.className='';},2800);}
+
+// ─── Datas (sempre em hora local) ─────────────────────
+const pad=n=>String(n).padStart(2,'0');
+const dstr=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const todayStr=()=>dstr(new Date());
+const pdate=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d);};
+const addDays=(s,n)=>{const d=pdate(s);d.setDate(d.getDate()+n);return dstr(d);};
+const isIso=s=>typeof s==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(s)&&!isNaN(pdate(s));
+function dateRange(a,b){const out=[];let c=a,g=0;while(c<=b&&g++<5000){out.push(c);c=addDays(c,1);}return out;}
+const daysBetween=(a,b)=>Math.round((pdate(b)-pdate(a))/86400000);
+const fmtD=s=>s.slice(8,10)+'/'+s.slice(5,7);
+const fmtDY=s=>s.slice(8,10)+'/'+s.slice(5,7)+'/'+s.slice(0,4);
+const MESES=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+const fmtMes=ym=>MESES[+ym.slice(5,7)-1]+' '+ym.slice(0,4);
+const hourOf=tsSec=>{const d=new Date(tsSec*1000);return d.getHours()+d.getMinutes()/60;};
+function fmtAge(ms){const s=Math.max(0,Math.round(ms/1000));if(s<60)return 'há '+s+' s';const m=Math.round(s/60);if(m<60)return 'há '+m+' min';return 'há '+Math.round(m/60)+' h';}
+
+async function sha256(s){
+  const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// DEFINIÇÕES
+// ═══════════════════════════════════════════════════════
+function T(){
+  return {
+    disc:numSetting('t_disc',15), discEnd:lsGet('t_disc_end','2026-10-22'),
+    sell:numSetting('t_sell',0.065), upac:lsGet('upac_on','0')==='1',
+    potDay:numSetting('t_pot_day',1.2756), kva:numSetting('t_kva',13.8),
+    invest:numSetting('s_invest',9340), installDate:lsGet('s_install_date','2026-04-24'),
+    batCap:numSetting('bat_cap',31.84), batMin:numSetting('bat_min',15),
+  };
+}
+
+// ─── Tarifas com histórico (cada preço vale a partir de uma data) ──
+let TAR=null;
+function tarifas(){
+  if(TAR) return TAR;
+  let list=lsJSON('tarifas_v2',null);
+  if(!Array.isArray(list)||!list.length){
+    const peak=numSetting('t_peak_net',0.1978), off=numSetting('t_off_net',0.1162);
+    list=[{from:T().installDate,modo:'bi',peakNet:peak,offNet:off,simplesNet:peak}];
+    lsSet('tarifas_v2',JSON.stringify(list));
+  }
+  TAR=list.filter(p=>p&&isIso(p.from)).sort((a,b)=>a.from<b.from?-1:1);
+  return TAR;
+}
+function tarifaEm(ds){const L=tarifas();let cur=L[0];for(const p of L){if(p.from<=ds)cur=p;}return cur;}
+function desconto(ds){const t=T();return ds<=t.discEnd?t.disc/100:0;}
+// Preço final de 1 kWh comprado à rede (energia c/ desconto + IEC, tudo c/ IVA)
+function precoKwh(ds,fv){
+  const p=tarifaEm(ds);
+  const net=p.modo==='simples'?p.simplesNet:(fv?p.peakNet:p.offNet);
+  return (net*(1-desconto(ds))+CFG.IEC)*CFG.IVA;
+}
+
+// ─── Horário EDP bi-horário, ciclo semanal (minuto a minuto) ──
+function isVerao(date){
+  const y=date.getFullYear();
+  const mar=new Date(y,2,31);while(mar.getDay()!==0)mar.setDate(mar.getDate()-1);
+  const out=new Date(y,9,31);while(out.getDay()!==0)out.setDate(out.getDate()-1);
+  return date>=mar&&date<out;
+}
+function isFVmin(dow,min,ver){
+  if(dow===0) return false;                        // Domingo: tudo Vazio
+  if(dow===6) return ver                           // Sábado
+    ? ((min>=540&&min<840)||(min>=1200&&min<1320))  // Verão: 09:00-14:00 e 20:00-22:00
+    : ((min>=570&&min<780)||(min>=1110&&min<1320)); // Inverno: 09:30-13:00 e 18:30-22:00
+  return min>=420;                                 // Seg-Sex: 07:00-24:00
+}
+function isNowFV(){const n=new Date();return isFVmin(n.getDay(),n.getHours()*60+n.getMinutes(),isVerao(n));}
+function fvFraction(ds){const d=pdate(ds),v=isVerao(d);let c=0;for(let m=0;m<1440;m+=15)if(isFVmin(d.getDay(),m,v))c++;return c/96;}
+
+// ─── Ciclos de faturação ──
+function cicloDe(ds){
+  const d=pdate(ds);let y=d.getFullYear(),m=d.getMonth();
+  if(d.getDate()<CFG.cicloDia){m--;if(m<0){m=11;y--;}}
+  return {ini:dstr(new Date(y,m,CFG.cicloDia)),fim:dstr(new Date(y,m+1,CFG.cicloDia-1))};
+}
+function cicloDaFatura(ym){const [y,m]=ym.split('-').map(Number);return {ini:dstr(new Date(y,m-2,CFG.cicloDia)),fim:dstr(new Date(y,m-1,CFG.cicloDia-1))};}
+
+// ─── Sol (algoritmo NOAA/SunCalc) ──
+function sunTimes(date,lat,lon){
+  const rad=Math.PI/180,dayMs=86400000,J1970=2440588,J2000=2451545;
+  const toDays=d=>d.valueOf()/dayMs-0.5+J1970-J2000, fromJ=j=>new Date((j+0.5-J1970)*dayMs);
+  const e=rad*23.4397,lw=rad*-lon,phi=rad*lat;
+  const d=toDays(new Date(date.getFullYear(),date.getMonth(),date.getDate(),12));
+  const n=Math.round(d-0.0009-lw/(2*Math.PI)), ds=0.0009+lw/(2*Math.PI)+n;
+  const M=rad*(357.5291+0.98560028*ds);
+  const C=rad*(1.9148*Math.sin(M)+0.02*Math.sin(2*M)+0.0003*Math.sin(3*M));
+  const L=M+C+rad*102.9372+Math.PI, dec=Math.asin(Math.sin(e)*Math.sin(L));
+  const Jnoon=J2000+ds+0.0053*Math.sin(M)-0.0069*Math.sin(2*L);
+  const cosw=(Math.sin(rad*-0.833)-Math.sin(phi)*Math.sin(dec))/(Math.cos(phi)*Math.cos(dec));
+  if(cosw<-1||cosw>1) return null;
+  const Jset=J2000+0.0009+(Math.acos(cosw)+lw)/(2*Math.PI)+n+0.0053*Math.sin(M)-0.0069*Math.sin(2*L);
+  return {rise:fromJ(Jnoon-(Jset-Jnoon)),set:fromJ(Jset)};
+}
+
+// ═══════════════════════════════════════════════════════
+// ESTADO + ARMAZENAMENTO LOCAL
+// ═══════════════════════════════════════════════════════
+const S={
+  live:null, today:null, curve:null, todayBuckets:null,
+  days:lsJSON('days_v2',{}),          // data → {pv,ld,gr,ex,bc,bd,src}
+  sm:{ok:null,err:'',retryAt:0,keys:null,missing:null,balance:null,lastOk:0},
+  dy:{ok:null,err:'',lastOk:0},
+  hist:{loadedAt:0,day:'',smErr:'',loading:false},
+  backfill:{running:false,done:0,total:0,fail:0},
+  histMode:'d', finTab:'d', page:'live',
+};
+let SLOTS=lsJSON('slots_v1',{});      // data → {sF,sV,iF,iV} kWh solar/rede em Fora Vazio / Vazio (curva 5 min)
+const SRC_RANK={local:0,dy:1,sm:2};
+
+function saveDays(){return lsSet('days_v2',JSON.stringify(S.days));}
+function saveSlots(){return lsSet('slots_v1',JSON.stringify(SLOTS));}
+function putDay(ds,d,src){
+  const cur=S.days[ds];
+  if(cur&&SRC_RANK[cur.src]>SRC_RANK[src]&&ds!==todayStr()) return false;
+  const n=v=>isNum(v)?+v:null;
+  S.days[ds]={pv:n(d.pv),ld:n(d.ld),gr:n(d.gr),ex:n(d.ex),bc:n(d.bc),bd:n(d.bd),src};
+  return true;
+}
+const hasDay=d=>d&&isNum(d.ld)&&d.ld>0;
+
+function migrateLegacy(){
+  if(lsGet('mig_v2')==='1') return;
+  const legacy=lsKeys().filter(k=>k.startsWith('hist_'));
+  legacy.forEach(k=>{
+    const ds=k.slice(5),v=lsJSON(k,null);
+    if(v&&isIso(ds)&&!S.days[ds]) putDay(ds,v,'local');
+  });
+  if(saveDays()){
+    legacy.forEach(lsDel);
+    // Credenciais Deye deixam de estar no browser (ficam só no Worker)
+    ['dy_token','dy_token_exp','dy_pwdHash','dy_email','dy_stationId'].forEach(lsDel);
+    lsSet('mig_v2','1');
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// CÁLCULOS — POUPANÇA, FATURA, AMORTIZAÇÃO
+// ═══════════════════════════════════════════════════════
+// Integra a curva de 5 min: kWh consumidos do solar/bateria e kWh comprados, em Fora Vazio e Vazio
+function bucketsFromRows(rows){
+  let sF=0,sV=0,iF=0,iV=0,n=0;
+  for(let i=0;i<rows.length;i++){
+    const r=rows[i],ld=r[2],g=r[3];
+    if(!isNum(ld)) continue;
+    const dt=rows[i+1]?Math.min(900,rows[i+1][0]-r[0]):300;
+    if(dt<=0) continue;
+    const h=dt/3600, imp=isNum(g)&&g>0?g:0, self=Math.max(0,ld-imp);
+    const d=new Date(r[0]*1000);
+    const fv=isFVmin(d.getDay(),d.getHours()*60+d.getMinutes(),isVerao(d));
+    if(fv){sF+=self*h/1000;iF+=imp*h/1000;}else{sV+=self*h/1000;iV+=imp*h/1000;}
+    n++;
+  }
+  if(n<12) return null;
+  const r3=v=>Math.round(v*1000)/1000;
+  return {sF:r3(sF),sV:r3(sV),iF:r3(iF),iV:r3(iV)};
+}
+const dayType=ds=>{const w=pdate(ds).getDay();return w===0?'dom':w===6?'sab':'util';};
+let AVG=null;
+function avgShares(){
+  if(AVG) return AVG;
+  const acc={};
+  for(const [ds,b] of Object.entries(SLOTS)){
+    if(!b||!isNum(b.sF)) continue;
+    const k=dayType(ds);acc[k]=acc[k]||{sF:0,sV:0,iF:0,iV:0};
+    acc[k].sF+=b.sF;acc[k].sV+=b.sV;acc[k].iF+=b.iF;acc[k].iV+=b.iV;
+  }
+  AVG={};
+  for(const [k,a] of Object.entries(acc)){
+    AVG[k]={s:a.sF+a.sV>1?a.sF/(a.sF+a.sV):null,i:a.iF+a.iV>1?a.iF/(a.iF+a.iV):null};
+  }
+  return AVG;
+}
+// Fração em Fora Vazio: medida (curva 5 min) > média de dias do mesmo tipo > horas FV do dia
+function shareFV(ds,kind){
+  const b=ds===todayStr()?S.todayBuckets:SLOTS[ds];
+  if(b&&isNum(b.sF)){
+    const f=kind==='s'?b.sF:b.iF, v=kind==='s'?b.sV:b.iV;
+    if(f+v>0.05) return {fv:f/(f+v),exact:true};
+  }
+  const a=avgShares()[dayType(ds)];
+  if(a&&isNum(a[kind])) return {fv:a[kind],exact:false};
+  return {fv:fvFraction(ds),exact:false};
+}
+// POUPANÇA DO DIA = kWh consumidos vindos do solar/bateria × preço que se pagaria à rede nesse momento
+function poupancaDia(ds,d){
+  const k=Math.max(0,(d.ld||0)-(d.gr||0));
+  const sh=shareFV(ds,'s');
+  const eurV=k*(sh.fv*precoKwh(ds,true)+(1-sh.fv)*precoKwh(ds,false));
+  return {kwh:k,eur:eurV,exact:sh.exact,fv:sh.fv};
+}
+function receitaDia(d){const t=T();return t.upac?(d.ex||0)*t.sell:0;}
+function custoRedeDia(ds,d){
+  const g=d.gr||0,sh=shareFV(ds,'i');
+  return {kwh:g,fv:g*sh.fv,vz:g*(1-sh.fv),eur:g*(sh.fv*precoKwh(ds,true)+(1-sh.fv)*precoKwh(ds,false)),exact:sh.exact};
+}
+
+// Estimativa da fatura EDP de um ciclo. projetar=true extrapola a energia para o ciclo completo
+// (o dia de hoje, incompleto, não entra na projeção quando já há outros dias).
+function estimarFatura(ini,fim,projetar){
+  const t=T(),today=todayStr(),dias=dateRange(ini,fim),N=dias.length;
+  const lst=[];
+  for(const ds of dias){
+    if(ds>today) break;
+    const d=S.days[ds]; if(!hasDay(d)) continue;
+    lst.push([ds,d]);
+  }
+  const use=projetar&&lst.length>1?lst.filter(([ds])=>ds!==today):lst;
+  let exact=0,kwh=0,fv=0,vz=0,enNet=0;
+  for(const [ds,d] of use){
+    const g=d.gr||0,sh=shareFV(ds,'i'),p=tarifaEm(ds),disc=desconto(ds);
+    if(sh.exact) exact++;
+    const f=g*sh.fv,v=g-f; fv+=f;vz+=v;kwh+=g;
+    enNet+=p.modo==='simples'?g*p.simplesNet*(1-disc):(f*p.peakNet+v*p.offNet)*(1-disc);
+  }
+  const n=use.length;
+  const k=projetar&&n>0?N/n:1, frac=projetar?1:Math.min(1,n/N);
+  const energia=enNet*k, pot=t.potDay*(projetar?N:n), dgeg=CFG.DGEG*frac, iec=kwh*k*CFG.IEC;
+  const base=energia+pot+dgeg+iec, iva=base*(CFG.IVA-1), cav=CFG.CAV*frac;
+  return {total:base+iva+cav,energia,pot,dgeg,iec,iva,cav,kwh:kwh*k,fv:fv*k,vz:vz*k,n,N,exact};
+}
+
+function calcAmort(){
+  const t=T(),today=todayStr();
+  if(!isIso(t.installDate)||t.installDate>today) return null;
+  const dias=dateRange(t.installDate,today);
+  let eurS=0,rev=0,kwhS=0,n=0,exact=0,eurFull=0,nFull=0,prev=null,gs=null;
+  const gaps=[],serie=[],last30=[];
+  for(const ds of dias){
+    const d=S.days[ds];
+    if(hasDay(d)){
+      const p=poupancaDia(ds,d),r=receitaDia(d);
+      eurS+=p.eur;rev+=r;kwhS+=p.kwh;n++;if(p.exact)exact++;
+      if(ds!==today){eurFull+=p.eur+r;nFull++;if(daysBetween(ds,today)<=30)last30.push(p.eur+r);}
+      if(gs){gaps.push([gs,prev]);gs=null;}
+    }else if(ds!==today){ if(!gs) gs=ds; }
+    serie.push({x:daysBetween(t.installDate,ds),y:eurS+rev});
+    prev=ds;
+  }
+  if(gs&&gs!==today) gaps.push([gs,addDays(today,-1)]);
+  const total=eurS+rev, media=nFull?eurFull/nFull:0;
+  const ritmo30=last30.length?last30.reduce((a,b)=>a+b,0)/last30.length:null;
+  const falta=Math.max(0,t.invest-total);
+  const diasFalta=media>0?Math.ceil(falta/media):null;
+  return {total,eurS,rev,kwhS,n,exact,nFull,media,ritmo30,falta,diasFalta,
+    pct:t.invest>0?Math.min(100,total/t.invest*100):0,
+    diasSistema:dias.length,gaps,serie,invest:t.invest,installDate:t.installDate};
+}
+
+// ═══════════════════════════════════════════════════════
+// REDE (Workers)
+// ═══════════════════════════════════════════════════════
+class HttpError extends Error{constructor(status,msg){super(msg);this.status=status;}}
+async function getJSON(url,{headers={},timeout=10000}={}){
+  const ctrl=new AbortController(),id=setTimeout(()=>ctrl.abort(),timeout);
+  try{
+    const r=await fetch(url,{headers,signal:ctrl.signal,cache:'no-store'});
+    let j=null;try{j=await r.json();}catch(e){}
+    if(!r.ok) throw new HttpError(r.status,(j&&j.error)||('HTTP '+r.status));
+    if(j===null) throw new HttpError(r.status,'Resposta inválida');
+    return j;
+  }catch(e){
+    if(e instanceof HttpError) throw e;
+    throw new HttpError(0,e.name==='AbortError'?'Tempo esgotado':'Sem ligação');
+  }finally{clearTimeout(id);}
+}
+const APP={key:lsGet('app_key',''),timers:[],started:false};
+function smUrl(){return (lsGet('sm_url',CFG.smProxy)||'').trim().replace(/\/+$/,'');}
+function smAvailable(){return Boolean(APP.key&&smUrl()&&Date.now()>=S.sm.retryAt);}
+async function smGet(path,timeout=12000){
+  try{
+    const j=await getJSON(smUrl()+path,{headers:{Authorization:'Bearer '+APP.key},timeout});
+    S.sm.ok=true;S.sm.err='';S.sm.lastOk=Date.now();
+    return j;
+  }catch(e){
+    if(e.status===401){authLost();throw e;}
+    S.sm.ok=false;S.sm.err=e.message;
+    // Worker inexistente / não configurado → não insistir durante 10 min
+    if(e.status===0||e.status===404||e.status===503) S.sm.retryAt=Date.now()+CFG.SM_RETRY_MS;
+    throw e;
+  }
+}
+async function dyGet(path,timeout=10000){
+  try{const j=await getJSON(CFG.dyProxy+path,{timeout});S.dy.ok=true;S.dy.err='';S.dy.lastOk=Date.now();return j;}
+  catch(e){S.dy.ok=false;S.dy.err=e.message;throw e;}
+}
+
+// ═══════════════════════════════════════════════════════
+// LOCK / AUTENTICAÇÃO
+// ═══════════════════════════════════════════════════════
+const LEGACY_LOCK='solar_pwd_hash';
+async function tryUnlock(pwd){
+  const btn=$('lock-btn');btn.disabled=true;st('lock-err','');st('lock-hint','A verificar...');
+  try{
+    if(smUrl()){
+      try{
+        await getJSON(smUrl()+'/sm/ping',{headers:{Authorization:'Bearer '+pwd},timeout:8000});
+        return enterWith(pwd);
+      }catch(e){
+        if(e.status===401){st('lock-err','Password incorreta');return;}
+        // Worker SOLARMAN indisponível ou por configurar → modo local (password anterior da app)
+      }
+    }
+    const stored=lsGet(LEGACY_LOCK)||await sha256('solar2024');
+    if(await sha256(pwd)===stored) return enterWith(pwd);
+    st('lock-err','Password incorreta');
+  }catch(e){
+    st('lock-err','Erro: '+e.message);
+  }finally{
+    btn.disabled=false;st('lock-hint','A password fica guardada neste dispositivo.');
+    $('lock-pwd').value='';
+  }
+}
+function enterWith(pwd){
+  APP.key=pwd;lsSet('app_key',pwd);S.sm.retryAt=0;
+  $('lock').style.display='none';$('app').style.display='flex';
+  if(!APP.started){APP.started=true;initApp();}else{startTimers();refreshAll();}
+}
+function showLock(msg){
+  stopTimers();
+  $('app').style.display='none';$('lock').style.display='flex';
+  st('lock-err',msg||'');$('lock-pwd').value='';
+}
+function authLost(){
+  if(!APP.key) return;
+  APP.key='';lsDel('app_key');
+  showLock('A password da app mudou — introduz a nova.');
+}
+function doLogout(){
+  if(!confirm('Sair e esquecer a password neste dispositivo?')) return;
+  APP.key='';lsDel('app_key');showLock('');
+}
+
+// ═══════════════════════════════════════════════════════
+// CARREGAMENTO DE DADOS
+// ═══════════════════════════════════════════════════════
+function setToday(d,src){
+  const ds=todayStr();
+  S.today={...d,src,day:ds};
+  putDay(ds,d,src);
+  saveDays();
+}
+
+async function loadLive(){
+  let fresh=false;
+  if(smAvailable()){
+    try{
+      const j=await smGet('/sm/live');
+      S.sm.keys=j.keys||null;S.sm.missing=j.missing||[];S.sm.balance=isNum(j.balanceW)?j.balanceW:null;
+      S.live={src:'SOLARMAN',ts:j.ts||Date.now(),pvW:j.pvW,ldW:j.ldW,gridW:j.gridW,batW:j.batW,soc:j.soc,tempC:j.tempC};
+      const td=j.today||{};
+      if(isNum(td.ld)&&td.day===todayStr()) setToday(td,'sm');
+      fresh=Date.now()-S.live.ts<20*60000;
+    }catch(e){ if(e.status===401) return; console.warn('[SM live]',e.message); }
+  }
+  if(!fresh){
+    try{
+      const r=await dyGet('/data');
+      const a=r&&r.data;
+      if(!r.ok||!a) throw new Error('Resposta inválida do Worker Deye');
+      if(a.live&&isNum(a.live.pvW)){
+        const lv=a.live;
+        if(!S.live||lv.ts>=S.live.ts){
+          S.live={src:'DEYE',ts:lv.ts||Date.now(),pvW:lv.pvW,ldW:lv.ldW,gridW:lv.wire,batW:lv.batP,soc:lv.bat,
+            tempC:isNum(lv.temp)?lv.temp:(S.live?S.live.tempC:null)};
+        }
+      }
+      if(a.day===todayStr()&&(!S.today||S.today.src!=='sm')) setToday(a,'dy');
+    }catch(e){console.warn('[DY live]',e.message);}
+  }
+  if(S.curve&&S.curve.src==='dy') appendLivePoint();
+  st('updated-ts','Act. '+new Date().toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'}));
+  renderLive();renderDaySummary();updateStatus();
+  if(S.page==='fin'&&S.finTab==='d') renderFinHoje();
+}
+
+async function loadCurve(){
+  const today=todayStr();
+  if(smAvailable()){
+    try{
+      const j=await smGet('/sm/day?date='+today,20000);
+      if(Array.isArray(j.rows)&&j.rows.length){
+        S.curve={src:'sm',date:today,loadedAt:Date.now(),
+          pts:j.rows.map(r=>({x:hourOf(r[0]),pv:r[1],ld:r[2],grid:r[3],bat:r[4],soc:r[5]}))};
+        S.todayBuckets=bucketsFromRows(j.rows);
+        renderCharts();renderDaySummary();
+        if(S.page==='fin') renderFinTab();
+        return;
+      }
+    }catch(e){ if(e.status===401) return; console.warn('[SM curva]',e.message); }
+  }
+  try{
+    const j=await dyGet('/today-chart');
+    if(j.ok&&Array.isArray(j.points)){
+      const hNow=new Date().getHours();
+      S.curve={src:'dy',date:today,loadedAt:Date.now(),
+        pts:j.points.filter(p=>isNum(p.h)&&p.h<=hNow).map(p=>({x:p.h,pv:p.pv,ld:p.ld,grid:p.wire,bat:p.batP,soc:p.bat}))};
+      S.todayBuckets=null;
+      appendLivePoint();renderCharts();
+    }
+  }catch(e){console.warn('[DY curva]',e.message);}
+}
+function appendLivePoint(){
+  if(!S.curve||!S.live||S.curve.date!==todayStr()) return;
+  const L=S.live,now=new Date(),x=now.getHours()+now.getMinutes()/60;
+  const pts=S.curve.pts,last=pts[pts.length-1];
+  const p={x,pv:L.pvW,ld:L.ldW,grid:L.gridW,bat:L.batW,soc:L.soc,live:true};
+  if(last&&last.live&&x-last.x<0.25) pts[pts.length-1]=p; else pts.push(p);
+}
+
+async function loadHistory(force=false){
+  if(S.hist.loading) return;
+  S.hist.loading=true;
+  const t=T(),today=todayStr();
+  try{
+    if(smAvailable()&&isIso(t.installDate)){
+      try{
+        const j=await smGet('/sm/days?from='+t.installDate+'&to='+today,30000);
+        for(const r of j.days||[]){ if(r.date!==today&&isIso(r.date)&&(isNum(r.ld)||isNum(r.pv))) putDay(r.date,r,'sm'); }
+        S.hist.smErr=(j.errors||[]).map(e=>fmtMes(e.month)+': '+e.error).join(' · ');
+      }catch(e){ if(e.status===401) return; S.hist.smErr=e.message; }
+    }
+    // Worker Deye só guarda 90 dias: usado apenas para preencher dias sem dados SOLARMAN
+    const need=dateRange(addDays(today,-89),addDays(today,-1))
+      .filter(ds=>ds>=t.installDate&&(!S.days[ds]||S.days[ds].src==='local'));
+    if(need.length||force){
+      try{
+        const j=await dyGet('/history?days=90',25000);
+        for(const h of j.history||[]){ if(h.date!==today&&isIso(h.date)) putDay(h.date,h,'dy'); }
+      }catch(e){console.warn('[DY histórico]',e.message);}
+    }
+    saveDays();AVG=null;
+    S.hist.loadedAt=Date.now();S.hist.day=today;
+  }finally{S.hist.loading=false;}
+  if(S.page==='fin') renderFinTab();
+  if(S.page==='tech') renderDiag();
+  startBackfill();
+}
+
+// Descarrega (em segundo plano) as curvas de 5 min dos dias passados para aplicar o preço de cada momento
+async function startBackfill(){
+  if(S.backfill.running||!smAvailable()) return;
+  const t=T(),today=todayStr();
+  const todo=dateRange(t.installDate,addDays(today,-1)).filter(ds=>SLOTS[ds]===undefined&&hasDay(S.days[ds])).reverse();
+  if(!todo.length) return;
+  S.backfill={running:true,done:0,total:todo.length,fail:0};
+  let fails=0;
+  for(const ds of todo.slice(0,CFG.BACKFILL_MAX)){
+    if(!smAvailable()) break;
+    try{
+      const j=await smGet('/sm/day?date='+ds,20000);
+      const b=Array.isArray(j.rows)&&j.rows.length>=100?bucketsFromRows(j.rows):null;
+      SLOTS[ds]=b||{na:1};
+      saveSlots();AVG=null;fails=0;
+    }catch(e){
+      if(e.status===401) break;
+      fails++;S.backfill.fail++;
+      if(fails>=3) break;
+    }
+    S.backfill.done++;
+    if(S.backfill.done%10===0&&S.page==='fin') renderFinTab();
+    await sleep(CFG.BACKFILL_GAP_MS);
+  }
+  S.backfill.running=false;
+  if(S.page==='fin') renderFinTab();
+}
+
+async function resyncHistory(){
+  if(!confirm('Voltar a descarregar o histórico e as curvas de 5 min? Os dados locais são substituídos pelos do SOLARMAN.')) return;
+  SLOTS={};saveSlots();AVG=null;
+  for(const ds of Object.keys(S.days)) if(S.days[ds].src!=='local') delete S.days[ds];
+  saveDays();
+  toast('A resincronizar...');
+  await loadHistory(true);
+  toast('Histórico atualizado');
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER — LIVE
+// ═══════════════════════════════════════════════════════
+function isNight(){const s=sunTimes(new Date(),CFG.lat,CFG.lon);const n=new Date();return s?(n<s.rise||n>s.set):false;}
+
+function renderLive(){
+  const L=S.live;if(!L) return;
+  const pv=isNum(L.pvW)&&L.pvW>20?L.pvW:0;
+  const ld=isNum(L.ldW)&&L.ldW>20?L.ldW:0;
+  const g=isNum(L.gridW)&&Math.abs(L.gridW)>5?L.gridW:0;
+  const b=isNum(L.batW)&&Math.abs(L.batW)>30?L.batW:0;
+
+  st('m-pv',fkw(pv));
+  st('m-pv-s',pv>0?nf(pv/(CFG.invKw*10),0)+'% do inversor':(isNight()?'Período noturno':'Sem produção'));
+
+  if(isNum(L.soc)){
+    st('m-bat',nf(L.soc,0));
+    $('m-batbar').style.width=clamp(L.soc,0,100)+'%';
+    st('m-bat-s',b<0?'% · a carregar '+nf(-b/1000,1)+' kW':b>0?'% · a descarregar '+nf(b/1000,1)+' kW':(L.soc>=99?'% · cheia':'% · em repouso'));
+  }
+  if(isNum(L.gridW)){
+    st('m-grid',fkw(Math.abs(g)));
+    const s=$('m-grid-s');
+    if(g>0){s.innerHTML='<span class="neg">kW · a comprar ↓</span>';st('m-grid-sub',isNowFV()?'Tarifa Fora Vazio':'Tarifa Vazio');}
+    else if(g<0){s.innerHTML='<span class="pos">kW · a exportar ↑</span>';st('m-grid-sub',T().upac?'Venda UPAC':'Sem UPAC — não remunerado');}
+    else{s.innerHTML='<span style="color:var(--accent)">kW · sem troca</span>';st('m-grid-sub','Casa autossuficiente');}
+  }
+  st('m-load',fkw(ld));
+  st('m-temp',isNum(L.tempC)?'Inversor '+nf(L.tempC,1)+' °C':'Inversor Deye 12 kW');
+  updateFlow(pv,ld,g,L.soc,b,L.tempC);
+  renderTech();
+}
+
+const DOT_PATHS={sun:'ps',bo:'pbo',bi:'pbi',gi:'pgi',go:'pgo',ld:'pld'};
+function buildDots(){
+  const colors={sun:'#F5A623',bo:'#A8E063',bi:'#F5A623',gi:'#FF6B6B',go:'#A8E063',ld:'#C471ED'};
+  let h='';
+  for(const [k,p] of Object.entries(DOT_PATHS)){
+    for(let i=0;i<3;i++){
+      h+=`<circle class="dot-${k}" r="4" fill="${colors[k]}" opacity="0"><animateMotion dur="1.1s" repeatCount="indefinite" begin="${(i*0.37).toFixed(2)}s"><mpath href="#${p}"/></animateMotion></circle>`;
+    }
+  }
+  $('dots').innerHTML=h;
+}
+function updateFlow(pv,ld,g,soc,b,temp){
+  const on={sun:pv>20,ld:ld>20,bi:b<-30,bo:b>30,gi:g>5,go:g<-5};
+  const setL=(id,v)=>{const e=$(id);if(e)e.setAttribute('stroke-opacity',v?'0.85':'0');};
+  const setA=(id,v)=>{const e=$(id);if(e)e.setAttribute('opacity',v?'1':'0');};
+  setL('fl-sun',on.sun);setA('ar-sun',on.sun);
+  setL('fl-bat-in',on.bi);setA('ar-bat-in',on.bi);
+  setL('fl-bat-out',on.bo);setA('ar-bat-out',on.bo);
+  setL('fl-grd-in',on.gi);setA('ar-grd-in',on.gi);
+  setL('fl-grd-out',on.go);setA('ar-grd-out',on.go);
+  setL('fl-load',on.ld);setA('ar-load',on.ld);
+  for(const k of Object.keys(DOT_PATHS)) document.querySelectorAll('.dot-'+k).forEach(c=>c.setAttribute('opacity',on[k]?'1':'0'));
+
+  st('f-pv',Math.round(pv).toLocaleString('pt-PT')+' W');
+  st('f-load',Math.round(ld).toLocaleString('pt-PT')+' W');
+  st('f-grid',Math.round(Math.abs(g)).toLocaleString('pt-PT')+' W');
+  st('f-grid-dir',g>5?'↓ comprar':g<-5?'↑ exportar':'≈ zero');
+  st('f-temp',isNum(temp)?nf(temp,1)+'°C':'—');
+  if(isNum(soc)){st('f-bat',nf(soc,0)+'%');$('f-bat-bar').setAttribute('width',(64*clamp(soc,0,100)/100).toFixed(1));}
+
+  const item=(c,t)=>`<span style="color:${c}">${t}</span>`;
+  const leg=[];
+  if(on.sun) leg.push(item('#F5A623','Solar '+nf(pv/1000,2)+' kW'));
+  if(on.bi)  leg.push(item('#A8E063','Bateria +'+nf(-b/1000,1)+' kW'));
+  if(on.bo)  leg.push(item('#FFD166','Bateria −'+nf(b/1000,1)+' kW'));
+  if(on.gi)  leg.push(item('#FF6B6B','Rede ↓'+nf(g/1000,2)+' kW'));
+  if(on.go)  leg.push(item('#A8E063','Rede ↑'+nf(-g/1000,2)+' kW'));
+  if(on.ld)  leg.push(item('#C471ED','Casa '+nf(ld/1000,2)+' kW'));
+  sethtml('flow-legend',leg.length?leg.join(''):'<span class="muted">Sem fluxo ativo</span>');
+}
+
+function renderDaySummary(){
+  const d=S.today;if(!d) return;
+  st('t-pv',fkwh(d.pv));st('t-ld',fkwh(d.ld));st('t-gr',fkwh(d.gr));
+  st('t-ex',fkwh(d.ex));st('t-bc',fkwh(d.bc));st('t-bd',fkwh(d.bd));
+  if(hasDay(d)){
+    const p=poupancaDia(todayStr(),d);
+    st('t-sav',eur(p.eur));
+    st('t-sav-s',nf(p.kwh,1)+' kWh do solar/bateria · '+(p.exact?'preço de cada momento':'FV/Vazio estimado'));
+  }
+}
+
+function updateStatus(){
+  const p=$('status-pill');
+  if(!S.live){p.className='pill err';st('status-txt',S.dy.ok===false&&S.sm.ok!==true?'SEM LIGAÇÃO AOS DADOS':'A LIGAR...');return;}
+  const age=Date.now()-S.live.ts;
+  p.className='pill '+(age>15*60000?'warn':'ok');
+  st('status-txt',S.live.src+' · '+fmtAge(age).toUpperCase());
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER — TÉCNICO
+// ═══════════════════════════════════════════════════════
+function renderSun(){
+  const now=new Date(),s=sunTimes(now,CFG.lat,CFG.lon);if(!s) return;
+  const tot=(s.set-s.rise)/3.6e6,rem=(s.set-now)/3.6e6,before=now<s.rise;
+  st('sun-h',before?nf(tot,1)+'h':rem>0?nf(rem,1)+'h':'0h');
+  $('sun-bar').style.width=(before?100:clamp(rem/tot*100,0,100))+'%';
+  st('sun-sub','Nascer '+hm(s.rise)+' · Pôr '+hm(s.set));
+}
+function renderTech(){
+  renderSun();
+  const L=S.live;if(!L) return;
+  const t=T();
+  const b=isNum(L.batW)?L.batW:0, ld=isNum(L.ldW)?Math.max(0,L.ldW):0;
+  if(isNum(L.soc)){
+    const usable=Math.max(0,(L.soc-t.batMin)/100*t.batCap);
+    if(b<-30){
+      const toFull=(100-L.soc)/100*t.batCap/(-b/1000);
+      st('auto-lbl','🔋 CHEIA EM');
+      st('auto-h',L.soc>=99?'Cheia':toFull>24?'>24h':nf(toFull,1)+'h');
+      $('auto-bar').style.width=clamp(L.soc,0,100)+'%';
+      st('auto-sub','a carregar '+nf(-b/1000,1)+' kW');
+    }else{
+      const draw=ld/1000,h=draw>0.05?usable/draw:null;
+      st('auto-lbl','🔋 AUTONOMIA');
+      st('auto-h',h===null?'—':h>48?'>48h':nf(h,1)+'h');
+      $('auto-bar').style.width=(h===null?0:clamp(h/24*100,0,100))+'%';
+      st('auto-sub',nf(usable,1)+' kWh úteis (até '+t.batMin+'%) · '+nf(draw,2)+' kW');
+    }
+  }
+  if(isNum(L.tempC)){
+    st('temp-big',nf(L.tempC,1)+' °C');
+    $('temp-bar').style.width=clamp(L.tempC,0,100)+'%';
+    st('temp-sub',L.tempC>60?'⚠ Elevada — verificar ventilação':'Normal < 65 °C');
+  }else{
+    st('temp-big','—');
+    st('temp-sub',S.sm.ok?'SOLARMAN sem sensor de temperatura reconhecido':'Disponível com o Worker SOLARMAN');
+  }
+  renderAlerts();
+  if(S.page==='tech') renderDiag();
+}
+function renderAlerts(){
+  const L=S.live,t=T(),a=[];
+  if(!L){sethtml('alerts','');return;}
+  const age=Date.now()-L.ts;
+  a.push(age>15*60000
+    ?{c:'warn',i:'⏱',t:'Dados desatualizados',s:'Última leitura '+fmtAge(age)+' ('+L.src+')'}
+    :{c:'ok',i:'⚡',t:'Inversor online',s:L.src+' · '+fmtAge(age)+(isNum(L.tempC)?' · '+nf(L.tempC,1)+' °C':'')});
+  if(isNum(L.tempC)&&L.tempC>60) a.push({c:'warn',i:'🌡️',t:'Temperatura elevada',s:nf(L.tempC,1)+' °C'});
+  if(isNum(L.soc)&&L.soc<=t.batMin+5&&(L.batW||0)>=0) a.push({c:'warn',i:'🪫',t:'Bateria perto do mínimo',s:nf(L.soc,0)+'% (mínimo '+t.batMin+'%) — a seguir compra à rede'});
+  if((L.gridW||0)>100) a.push({c:'warn',i:'🔌',t:'A comprar à rede',s:nf(L.gridW/1000,2)+' kW · '+(isNowFV()?'Fora Vazio':'Vazio')});
+  if((L.gridW||0)<-500&&!t.upac) a.push({c:'info',i:'⬆️',t:'Excedente a ir para a rede sem pagamento',s:nf(-L.gridW/1000,2)+' kW — boa altura para máquinas/termoacumulador'});
+  if(S.sm.ok===false&&APP.key) a.push({c:'info',i:'☁️',t:'SOLARMAN indisponível — a usar Deye',s:S.sm.err||'—'});
+  sethtml('alerts',a.slice(0,5).map(x=>`<div class="alert-item"><div class="alert-icon ${x.c}">${x.i}</div><div><div class="alert-t">${esc(x.t)}</div><div class="alert-s">${esc(x.s)}</div></div></div>`).join(''));
+}
+function renderDiag(){
+  const L=S.live,t=T(),today=todayStr();
+  const days=dateRange(t.installDate,addDays(today,-1));
+  const cnt={sm:0,dy:0,local:0,none:0};
+  for(const ds of days){const d=S.days[ds];if(hasDay(d))cnt[d.src]=(cnt[d.src]||0)+1;else cnt.none++;}
+  const slots=days.filter(ds=>SLOTS[ds]&&isNum(SLOTS[ds].sF)).length;
+  const rows=[
+    ['Tempo real',L?L.src+' · '+fmtAge(Date.now()-L.ts):'—'],
+    ['Worker SOLARMAN',S.sm.ok?'✅ ligado':S.sm.ok===false?'❌ '+S.sm.err:'—'],
+    ['Worker Deye',S.dy.ok?'✅ ligado':S.dy.ok===false?'❌ '+S.dy.err:'não usado'],
+  ];
+  if(isNum(S.sm.balance)&&L&&L.src==='SOLARMAN'){
+    const ref=Math.max(500,(L.pvW||0)*0.15,(L.ldW||0)*0.15);
+    rows.push(['Balanço potência',(Math.abs(S.sm.balance)<=ref?'✅ ':'⚠ ')+Math.round(S.sm.balance)+' W'+(Math.abs(S.sm.balance)>ref?' (sinais trocados?)':'')]);
+  }
+  if(S.sm.missing&&S.sm.missing.length) rows.push(['Chaves em falta',S.sm.missing.join(', ')]);
+  rows.push(['Dias completos desde instalação',String(days.length)]);
+  rows.push(['Dias com dados','SOLARMAN '+cnt.sm+' · Deye '+cnt.dy+' · local '+cnt.local]);
+  rows.push(['Dias sem dados',String(cnt.none)]);
+  rows.push(['Curva 5 min (preço exato)',slots+' / '+days.length+' dias'+(S.backfill.running?' · a descarregar '+S.backfill.done+'/'+Math.min(S.backfill.total,CFG.BACKFILL_MAX):'')]);
+  if(S.hist.smErr) rows.push(['Avisos SOLARMAN',S.hist.smErr]);
+  sethtml('diag',rows.map(r=>`<div class="drow"><span>${esc(r[0])}</span><span>${esc(r[1])}</span></div>`).join(''));
+}
+
+async function showRaw(){
+  const b=$('btn-raw');
+  if(!APP.key||!smUrl()){toast('Worker SOLARMAN não configurado',true);return;}
+  b.disabled=true;b.textContent='⏳ A PEDIR AO SOLARMAN...';
+  try{
+    S.sm.retryAt=0;
+    const j=await smGet('/sm/setup',30000);
+    const cur=j.current||{};
+    const lines=['Dispositivo: '+(cur.deviceSn||'—')+' · estado '+(cur.deviceState??'—'),
+      'Estações: '+(j.stations||[]).map(x=>x.id+' '+x.name).join(', '),
+      'Equipamentos: '+(j.devices||[]).map(x=>x.deviceType+' '+x.deviceSn).join(', '),
+      j.stationsError?'Erro estações: '+j.stationsError:'', j.currentError?'Erro dados: '+j.currentError:'','',
+      ...(cur.dataList||[]).map(d=>d.key+' = '+d.value+' '+(d.unit||'')+'  ('+(d.name||'')+')')].filter(x=>x!=='');
+    $('raw').textContent=lines.join('\n');
+    $('raw').style.display='block';$('btn-raw-copy').style.display='block';
+  }catch(e){ if(e.status!==401) toast('Erro: '+e.message,true); }
+  finally{b.disabled=false;b.textContent='🔍 VER DADOS BRUTOS SOLARMAN';}
+}
+async function copyRaw(){
+  try{await navigator.clipboard.writeText($('raw').textContent);toast('Copiado');}
+  catch(e){toast('Não foi possível copiar — seleciona o texto manualmente',true);}
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER — FINANÇAS
+// ═══════════════════════════════════════════════════════
+function precoTxt(ds){
+  const p=tarifaEm(ds),dsc=desconto(ds);
+  const tail=dsc>0?' (−'+nf(dsc*100,0)+'%)':'';
+  return p.modo==='simples'
+    ?'Preço rede '+nf(precoKwh(ds,true),4)+' €/kWh'+tail
+    :'FV '+nf(precoKwh(ds,true),4)+' · Vazio '+nf(precoKwh(ds,false),4)+' €/kWh'+tail;
+}
+function renderFinHoje(){
+  const ds=todayStr(),d=S.today;
+  if(!d||!hasDay(d)){st('d-sav-s','A aguardar dados de hoje...');return;}
+  const p=poupancaDia(ds,d),c=custoRedeDia(ds,d),t=T();
+  st('d-sav',fkwh(p.kwh,1));
+  st('d-sav-s','Consumo '+nf(d.ld,1)+' − rede '+nf(d.gr,2)+' kWh · '+nf(p.fv*100,0)+'% em Fora Vazio'+(p.exact?' (medido)':' (estimado)')+'\n'+precoTxt(ds));
+  st('d-sav-c',eur(p.eur));
+  st('d-imp',fkwh(c.kwh,2));
+  st('d-imp-s','Fora Vazio '+nf(c.fv,2)+' · Vazio '+nf(c.vz,2)+' kWh'+(c.exact?' · medido':' · estimado'));
+  st('d-imp-c',eur(c.eur));
+  st('d-exp',fkwh(d.ex,1));
+  st('d-exp-s',t.upac?'Venda UPAC a '+nf(t.sell,3)+' €/kWh':'Sem contrato UPAC — energia não remunerada');
+  st('d-exp-c',t.upac?'+'+eur(receitaDia(d)):'0,00 €');
+  const as=d.ld>0?clamp((d.ld-d.gr)/d.ld*100,0,100):null;
+  const ac=d.pv>0?clamp((d.pv-(d.ex||0))/d.pv*100,0,100):null;
+  st('d-auto',as===null?'—':nf(as,0)+'%');
+  st('d-auto-s','Consumo coberto pelo solar/bateria · solar aproveitado em casa: '+(ac===null?'—':nf(ac,0)+'%'));
+  st('d-auto-c',eur(c.eur-receitaDia(d))+' / '+eur(c.eur+p.eur));
+}
+
+function setHistMode(m){S.histMode=m;$('seg-d').className=m==='d'?'on':'';$('seg-m').className=m==='m'?'on':'';renderHistorico();}
+function monthRows(){
+  const t=T(),today=todayStr(),map=new Map();
+  for(const ds of dateRange(t.installDate,today)){
+    const d=S.days[ds];if(!hasDay(d)) continue;
+    const ym=ds.slice(0,7),p=poupancaDia(ds,d);
+    const m=map.get(ym)||{ym,pv:0,ld:0,gr:0,ex:0,self:0,eur:0,n:0};
+    m.pv+=d.pv||0;m.ld+=d.ld||0;m.gr+=d.gr||0;m.ex+=d.ex||0;m.self+=p.kwh;m.eur+=p.eur+receitaDia(d);m.n++;
+    map.set(ym,m);
+  }
+  return [...map.values()];
+}
+function renderHistorico(){
+  const today=todayStr(),t=T();
+  const cnt={sm:0,dy:0,local:0};
+  Object.values(S.days).forEach(d=>{if(hasDay(d))cnt[d.src]=(cnt[d.src]||0)+1;});
+  st('hist-src','Fonte: SOLARMAN '+cnt.sm+' d · Deye '+cnt.dy+' d · local '+cnt.local+' d');
+  if(S.histMode==='d'){
+    const dias=dateRange(addDays(today,-29),today).filter(ds=>ds>=t.installDate);
+    const rows=dias.map(ds=>{const d=S.days[ds];if(!hasDay(d))return {ds,d:null};const p=poupancaDia(ds,d);return {ds,d,p:p.eur+receitaDia(d),self:p.kwh};});
+    const withData=rows.filter(r=>r.d);
+    if(!withData.length){sethtml('hist-table','<div class="no-data"><div class="no-data-icon">📅</div>Ainda sem histórico.<br>Os dias aparecem assim que o Worker os devolver.</div>');drawHistChart(null);return;}
+    let h='<table class="tbl"><thead><tr><th>DATA</th><th>SOLAR</th><th>CONSUMO</th><th>REDE</th><th>POUPANÇA</th></tr></thead><tbody>';
+    for(const r of rows.slice().reverse()){
+      if(!r.d){h+=`<tr><td>${fmtD(r.ds)}</td><td colspan="4" class="muted" style="text-align:center">sem dados</td></tr>`;continue;}
+      h+=`<tr class="${r.ds===today?'partial':''}"><td>${fmtD(r.ds)}${r.ds===today?' •':''}</td><td style="color:var(--sun)">${nf(r.d.pv,1)}</td><td style="color:var(--load)">${nf(r.d.ld,1)}</td><td class="neg">${nf(r.d.gr,1)}</td><td style="color:var(--euro)">${nf(r.p,2)} €</td></tr>`;
+    }
+    const tot=withData.filter(r=>r.ds!==today);
+    const sum=k=>tot.reduce((a,r)=>a+(k==='p'?r.p:(r.d[k]||0)),0);
+    h+=`</tbody><tfoot><tr><td><b>TOTAL</b></td><td><b>${nf(sum('pv'),0)}</b></td><td><b>${nf(sum('ld'),0)}</b></td><td><b>${nf(sum('gr'),1)}</b></td><td style="color:var(--euro)"><b>${nf(sum('p'),2)} €</b></td></tr></tfoot></table>`;
+    h+='<div class="small" style="margin-top:6px">kWh · • hoje (parcial) · total sem hoje</div>';
+    sethtml('hist-table',h);
+    st('hist-chart-lbl','CONSUMO (kWh) E POUPANÇA DIÁRIA (€)');
+    drawHistChart({labels:rows.map(r=>fmtD(r.ds)),
+      self:rows.map(r=>r.d?+r.self.toFixed(2):null),gr:rows.map(r=>r.d?+(r.d.gr||0).toFixed(2):null),
+      eur:rows.map(r=>r.d?+r.p.toFixed(2):null)});
+  }else{
+    const ms=monthRows();
+    if(!ms.length){sethtml('hist-table','<div class="no-data">Sem dados mensais.</div>');drawHistChart(null);return;}
+    let h='<table class="tbl"><thead><tr><th>MÊS</th><th>SOLAR</th><th>CONSUMO</th><th>REDE</th><th>POUPANÇA</th></tr></thead><tbody>';
+    for(const m of ms.slice().reverse()){
+      h+=`<tr><td>${fmtMes(m.ym)}<div class="muted" style="font-size:8px">${m.n} dias</div></td><td style="color:var(--sun)">${nf(m.pv,0)}</td><td style="color:var(--load)">${nf(m.ld,0)}</td><td class="neg">${nf(m.gr,1)}</td><td style="color:var(--euro)">${nf(m.eur,2)} €</td></tr>`;
+    }
+    h+='</tbody></table><div class="small" style="margin-top:6px">kWh · só dias com dados</div>';
+    sethtml('hist-table',h);
+    st('hist-chart-lbl','POUPANÇA MENSAL (€)');
+    drawHistChart({monthly:true,labels:ms.map(m=>fmtMes(m.ym)),eur:ms.map(m=>+m.eur.toFixed(2))});
+  }
+}
+
+function renderRetorno(){
+  const a=calcAmort(),t=T();
+  if(!a){st('amor-pct','—');st('amor-sub','Verifica a data de instalação em CONFIG');return;}
+  st('amor-pct',nf(a.pct,1)+'%');
+  st('amor-sub','Desde '+fmtDY(a.installDate)+' · '+a.diasSistema+' dias');
+  $('amor-bar').style.width=a.pct+'%';
+  st('amor-total',nf(a.invest,0)+' €');
+  st('amor-done',nf(a.total,0)+' €');
+  st('amor-left',nf(a.falta,0)+' €');
+  st('amor-avg',eur(a.media));
+  if(a.falta<=0){st('amor-days','PAGO ✅');st('amor-date','Investimento recuperado');}
+  else if(a.diasFalta){
+    const dt=pdate(addDays(todayStr(),a.diasFalta));
+    st('amor-days',a.diasFalta.toLocaleString('pt-PT')+' dias');
+    st('amor-date','≈ '+nf(a.diasFalta/30.44,1)+' meses · '+MESES[dt.getMonth()]+' '+dt.getFullYear()+' · ao ritmo médio de '+eur(a.media)+'/dia');
+  }else{st('amor-days','—');st('amor-date','Sem dados suficientes');}
+
+  const gapTxt=a.gaps.length?a.gaps.map(g=>g[0]===g[1]?fmtD(g[0]):fmtD(g[0])+'–'+fmtD(g[1])).join(', '):'nenhuma';
+  const rows=[
+    ['Fórmula diária','(consumo − rede) × preço da rede'],
+    ['Energia solar/bateria consumida',nf(a.kwhS,0)+' kWh'],
+    ['Poupança na fatura','+'+eur(a.eurS)],
+  ];
+  if(t.upac) rows.push(['Receita UPAC','+'+eur(a.rev)]);
+  rows.push(['Ritmo últimos 30 dias',a.ritmo30!==null?eur(a.ritmo30)+'/dia':'—']);
+  rows.push(['Dias com dados',a.n+' de '+a.diasSistema]);
+  rows.push(['Preço exato (curva 5 min)',a.exact+' dias'+(S.backfill.running?' · a descarregar...':'')]);
+  rows.push(['Dias sem dados',gapTxt]);
+  if(a.nFull<200) rows.push(['Nota','Média calculada sobretudo com meses de sol — a previsão vai ajustar no inverno']);
+  sethtml('amor-detail',rows.map(r=>`<div class="drow"><span>${esc(r[0])}</span><span>${esc(r[1])}</span></div>`).join(''));
+  drawAmorChart(a);
+  renderFaturaAtual();
+}
+
+function faturaRowsHTML(e){
+  const t=T();
+  const rows=[
+    ['Energia Fora Vazio · '+nf(e.fv,1)+' kWh',e.energia*(e.kwh>0?e.fv/e.kwh:0)],
+    ['Energia Vazio · '+nf(e.vz,1)+' kWh',e.energia*(e.kwh>0?e.vz/e.kwh:0)],
+    ['Potência '+nf(t.kva,2)+' kVA · '+nf(t.potDay,4)+' €/dia',e.pot],
+    ['DGEG',e.dgeg],['IEC · '+nf(e.kwh,1)+' kWh',e.iec],
+    ['IVA 23%',e.iva],['Contribuição audiovisual (c/ IVA 6%)',e.cav],
+  ];
+  return rows.map(r=>`<div class="fat-row"><span class="fat-row-lbl">${esc(r[0])}</span><span class="fat-row-val">${nf(r[1],2)} €</span></div>`).join('');
+}
+function renderFaturaAtual(){
+  const today=todayStr(),{ini,fim}=cicloDe(today);
+  const proj=estimarFatura(ini,fim,true),ate=estimarFatura(ini,fim,false);
+  st('fat-total',eur(proj.total));
+  st('fat-period','Ciclo '+fmtD(ini)+' → '+fmtD(fim)+' · projeção com '+proj.n+' de '+proj.N+' dias · até hoje: '+eur(ate.total));
+  let h=faturaRowsHTML(proj);
+  const dsc=desconto(today);
+  if(dsc>0) h+=`<div class="fat-row"><span class="fat-row-lbl pos">✅ Desconto ${nf(dsc*100,0)}% na energia até ${fmtDY(T().discEnd)}</span><span></span></div>`;
+  h+=`<div class="fat-row"><span class="fat-row-lbl">Repartição FV/Vazio: ${proj.exact} de ${proj.n} dias medidos (resto estimado)</span><span></span></div>`;
+  sethtml('fat-rows',h);
+}
+
+// ─── FATURAS (validação) ───
+function fatAll(){
+  return lsKeys().filter(k=>/^fatura_\d{4}-\d{2}$/.test(k)).sort()
+    .map(k=>lsJSON(k,null)).filter(f=>f&&/^\d{4}-\d{2}$/.test(f.mes));
+}
+function onFaturaSubmit(ev){
+  ev.preventDefault();
+  const mes=$('fat-mes').value.trim();
+  const val=$('fat-valor').value===''?null:parseFloat($('fat-valor').value);
+  const kwh=$('fat-kwh').value===''?null:parseFloat($('fat-kwh').value);
+  const eco=$('fat-economia').value===''?null:parseFloat($('fat-economia').value);
+  ['fat-mes','fat-valor','fat-kwh','fat-economia'].forEach(id=>$(id).classList.remove('invalid'));
+  const err=[];
+  if(!/^\d{4}-\d{2}$/.test(mes)){err.push('Indica o mês');$('fat-mes').classList.add('invalid');}
+  [['fat-valor',val],['fat-kwh',kwh],['fat-economia',eco]].forEach(([id,v])=>{if(v!==null&&(!isNum(v)||v<0||v>100000)){err.push('Valor inválido');$(id).classList.add('invalid');}});
+  if(val===null&&kwh===null&&eco===null) err.push('Preenche pelo menos um valor');
+  if(err.length){st('fat-err',[...new Set(err)].join(' · '));return;}
+  st('fat-err','');
+  if(!lsSet('fatura_'+mes,JSON.stringify({mes,valor:val,kwh,economia:eco,ts:Date.now()}))){st('fat-err','Não foi possível guardar (armazenamento cheio?)');return;}
+  $('fat-form').reset();
+  toast('Fatura '+fmtMes(mes)+' guardada');
+  renderFaturas();
+}
+function delFatura(mes){if(!confirm('Apagar a fatura de '+fmtMes(mes)+'?'))return;lsDel('fatura_'+mes);renderFaturas();}
+function diffTag(app,ref){
+  if(!isNum(app)||!isNum(ref)||ref===0) return '';
+  const pct=(app-ref)/ref*100,cls=Math.abs(pct)<=10?'pos':Math.abs(pct)<=25?'warn-c':'neg';
+  return ` <span class="${cls}">(${pct>0?'+':''}${nf(pct,0)}%)</span>`;
+}
+function renderFaturas(){
+  const fats=fatAll().slice().reverse();
+  if(!fats.length){sethtml('fat-list','<div class="no-data"><div class="no-data-icon">🧾</div>Sem faturas registadas.</div>');$('fat-chart-wrap').style.display='none';return;}
+  let h='';const chart=[];
+  for(const f of fats){
+    const {ini,fim}=cicloDaFatura(f.mes);
+    const e=estimarFatura(ini,fim,true);
+    const imp=dateRange(ini,fim).reduce((a,ds)=>a+(hasDay(S.days[ds])?(S.days[ds].gr||0):0),0);
+    // Poupança da app no mês civil (para comparar com a "Economia" da app Deye)
+    const [y,m]=f.mes.split('-').map(Number);
+    const mIni=f.mes+'-01',mFim=dstr(new Date(y,m,0));
+    let pou=0,nm=0;
+    for(const ds of dateRange(mIni,mFim)){const d=S.days[ds];if(hasDay(d)){pou+=poupancaDia(ds,d).eur;nm++;}}
+    const cov=e.n+'/'+e.N+' dias';
+    h+=`<div class="inv-card"><div class="inv-head"><div><div class="inv-title">${esc(fmtMes(f.mes))}</div><div class="small">Ciclo ${fmtD(ini)} → ${fmtD(fim)} · app: ${cov}</div></div><button class="btn-del" onclick="delFatura('${esc(f.mes)}')" aria-label="Apagar">🗑</button></div>`;
+    h+='<div class="detail-rows">';
+    if(isNum(f.valor)) h+=`<div class="drow"><span>Fatura EDP / estimativa app</span><span>${eur(f.valor)} / ${e.n?eur(e.total):'—'}${e.n?diffTag(e.total,f.valor):''}</span></div>`;
+    if(isNum(f.kwh)) h+=`<div class="drow"><span>kWh rede EDP / medidos</span><span>${nf(f.kwh,1)} / ${e.n?nf(imp,1):'—'}${e.n===e.N?diffTag(imp,f.kwh):''}</span></div>`;
+    if(isNum(f.economia)) h+=`<div class="drow"><span>Economia Deye / poupança app (mês)</span><span>${eur(f.economia)} / ${nm?eur(pou):'—'}${nm?diffTag(pou,f.economia):''}</span></div>`;
+    if(e.n<e.N) h+=`<div class="drow"><span>Aviso</span><span class="warn-c">faltam dados de ${e.N-e.n} dias no ciclo</span></div>`;
+    h+='</div></div>';
+    if(isNum(f.valor)&&e.n) chart.push({l:fmtMes(f.mes),edp:f.valor,app:+e.total.toFixed(2)});
+  }
+  sethtml('fat-list',h);
+  drawFatChart(chart.reverse());
+}
+
+function switchFin(id){
+  S.finTab=id;
+  ['d','h','f','fat'].forEach(k=>{$('itab-'+k).className='itab'+(k===id?' on':'');$('itp-'+k).className='itp'+(k===id?' on':'');});
+  renderFinTab();
+}
+function renderFinTab(){
+  try{
+    if(S.finTab==='d') renderFinHoje();
+    else if(S.finTab==='h') renderHistorico();
+    else if(S.finTab==='f') renderRetorno();
+    else if(S.finTab==='fat') renderFaturas();
+  }catch(e){console.error('[FIN]',e);toast('Erro ao calcular: '+e.message,true);}
+}
+
+// ═══════════════════════════════════════════════════════
+// GRÁFICOS
+// ═══════════════════════════════════════════════════════
+const CH={};
+const COL={sun:'#F5A623',load:'#C471ED',bat:'#A8E063',grid:'#4ECDC4',red:'#FF6B6B',euro:'#FFD166',muted:'#5A6785',gridline:'rgba(255,255,255,0.05)'};
+const FONT=(big)=>({family:"'JetBrains Mono', ui-monospace, monospace",size:big?10:9});
+function kill(id){if(CH[id]){CH[id].destroy();delete CH[id];}}
+function make(id,canvasId,cfg){kill(id);const c=$(canvasId);if(!c||!window.Chart)return null;CH[id]=new Chart(c,cfg);return CH[id];}
+function curveOpts(big,yTitle){
+  return {responsive:true,maintainAspectRatio:false,animation:false,parsing:true,
+    interaction:{mode:'nearest',axis:'x',intersect:false},
+    plugins:{legend:{labels:{color:COL.muted,font:FONT(big),boxWidth:8,padding:big?10:6}},
+      tooltip:{callbacks:{title:it=>{const m=Math.round(it[0].parsed.x*60);return pad(Math.floor(m/60))+':'+pad(m%60);},
+        label:c=>c.dataset.label+': '+(c.dataset.yAxisID==='y2'?nf(c.parsed.y,0)+'%':nf(c.parsed.y,2)+' kW')}}},
+    scales:{
+      x:{type:'linear',min:0,max:24,ticks:{color:COL.muted,font:FONT(big),stepSize:3,callback:v=>v+'h'},grid:{color:COL.gridline}},
+      y:{ticks:{color:COL.muted,font:FONT(big),callback:v=>v+(yTitle||'')},grid:{color:COL.gridline},grace:'5%'},
+      y2:{position:'right',min:0,max:100,ticks:{color:COL.bat,font:FONT(big),stepSize:25,callback:v=>v+'%'},grid:{display:false}},
+    }};
+}
+const series=(key,div=1000)=>(S.curve?S.curve.pts:[]).filter(p=>isNum(p[key])).map(p=>({x:p.x,y:key==='soc'?p[key]:p[key]/div}));
+function todayCfg(big){
+  const dense=S.curve&&S.curve.src==='sm';const pr=dense?0:2;
+  return {type:'line',data:{datasets:[
+    {label:'Solar kW',data:series('pv'),borderColor:COL.sun,backgroundColor:'rgba(245,166,35,.12)',fill:true,tension:.3,pointRadius:pr,borderWidth:2},
+    {label:'Consumo kW',data:series('ld'),borderColor:COL.load,backgroundColor:'rgba(196,113,237,.06)',fill:true,tension:.3,pointRadius:pr,borderWidth:1.5},
+    {label:'Bateria %',data:series('soc'),borderColor:COL.bat,borderDash:[4,3],fill:false,tension:.3,pointRadius:0,borderWidth:1.5,yAxisID:'y2'},
+  ]},options:curveOpts(big,'')};
+}
+function techCfg(big){
+  const dense=S.curve&&S.curve.src==='sm';const pr=dense?0:2;
+  const o=curveOpts(big,'');
+  return {type:'line',data:{datasets:[
+    {label:'Bateria kW',data:series('bat'),borderColor:COL.euro,backgroundColor:'rgba(255,209,102,.08)',fill:'origin',tension:.3,pointRadius:pr,borderWidth:1.5},
+    {label:'Rede kW',data:series('grid'),borderColor:COL.grid,backgroundColor:'rgba(78,205,196,.08)',fill:'origin',tension:.3,pointRadius:pr,borderWidth:1.5},
+    {label:'SOC %',data:series('soc'),borderColor:COL.bat,borderDash:[4,3],fill:false,tension:.3,pointRadius:0,borderWidth:1.5,yAxisID:'y2'},
+  ]},options:o};
+}
+function renderCharts(){
+  if(!window.Chart) return;
+  const n=S.curve?S.curve.pts.length:0;
+  st('today-msg',!S.curve?'Sem curva do dia disponível':S.curve.src==='sm'?'SOLARMAN · resolução 5 min · '+n+' leituras':'Worker Deye · 1 leitura por hora (ativa o SOLARMAN para 5 min)');
+  if(S.page==='live'||CH.today) make('today','ch-today',todayCfg(false));
+  if(S.page==='tech'||CH.tech) make('tech','ch-tech',techCfg(false));
+}
+function drawHistChart(d){
+  if(!window.Chart) return;
+  if(!d){kill('hist');return;}
+  const base={responsive:true,maintainAspectRatio:false,animation:false,
+    plugins:{legend:{labels:{color:COL.muted,font:FONT(false),boxWidth:8}}},
+    scales:{x:{stacked:true,ticks:{color:COL.muted,font:FONT(false),maxRotation:0,autoSkip:true,maxTicksLimit:8},grid:{display:false}},
+      y:{stacked:true,ticks:{color:COL.muted,font:FONT(false)},grid:{color:COL.gridline}}}};
+  if(d.monthly){
+    make('hist','ch-hist',{type:'bar',data:{labels:d.labels,datasets:[{label:'Poupança €',data:d.eur,backgroundColor:'rgba(255,209,102,.75)',borderRadius:4}]},
+      options:{...base,scales:{...base.scales,y:{...base.scales.y,ticks:{...base.scales.y.ticks,callback:v=>v+'€'}}}}});
+    return;
+  }
+  make('hist','ch-hist',{type:'bar',data:{labels:d.labels,datasets:[
+    {label:'Solar/bateria kWh',data:d.self,backgroundColor:'rgba(168,224,99,.65)',borderRadius:2,stack:'c'},
+    {label:'Rede kWh',data:d.gr,backgroundColor:'rgba(255,107,107,.7)',borderRadius:2,stack:'c'},
+    {label:'Poupança €',data:d.eur,type:'line',borderColor:COL.euro,backgroundColor:COL.euro,pointRadius:2,borderWidth:2,tension:.3,yAxisID:'y2',spanGaps:true},
+  ]},options:{...base,scales:{...base.scales,y2:{position:'right',ticks:{color:COL.euro,font:FONT(false),callback:v=>v+'€'},grid:{display:false}}}}});
+}
+function drawAmorChart(a){
+  if(!window.Chart) return;
+  const today=daysBetween(a.installDate,todayStr());
+  const endX=a.diasFalta?today+a.diasFalta:today;
+  const datasets=[
+    {label:'Recuperado €',data:a.serie,borderColor:COL.bat,backgroundColor:'rgba(168,224,99,.12)',fill:true,pointRadius:0,borderWidth:2},
+    {label:'Investimento',data:[{x:0,y:a.invest},{x:Math.max(endX,today+30),y:a.invest}],borderColor:COL.red,borderDash:[6,4],pointRadius:0,borderWidth:1.5},
+  ];
+  if(a.diasFalta) datasets.push({label:'Previsão',data:[{x:today,y:a.total},{x:endX,y:a.invest}],borderColor:COL.grid,borderDash:[3,3],pointRadius:0,borderWidth:1.5});
+  const inst=pdate(a.installDate);
+  make('amor','ch-amor',{type:'line',data:{datasets},options:{responsive:true,maintainAspectRatio:false,animation:false,
+    plugins:{legend:{labels:{color:COL.muted,font:FONT(false),boxWidth:8}},tooltip:{callbacks:{title:it=>{const d=new Date(inst);d.setDate(d.getDate()+Math.round(it[0].parsed.x));return d.toLocaleDateString('pt-PT');},label:c=>c.dataset.label+': '+nf(c.parsed.y,0)+' €'}}},
+    scales:{x:{type:'linear',min:0,ticks:{color:COL.muted,font:FONT(false),maxTicksLimit:6,callback:v=>{const d=new Date(inst);d.setDate(d.getDate()+v);return MESES[d.getMonth()]+' '+String(d.getFullYear()).slice(2);}},grid:{color:COL.gridline}},
+      y:{min:0,ticks:{color:COL.muted,font:FONT(false),callback:v=>nf(v/1000,1)+'k€'},grid:{color:COL.gridline}}}}});
+}
+function drawFatChart(rows){
+  if(!window.Chart||rows.length<1){$('fat-chart-wrap').style.display='none';kill('fat');return;}
+  $('fat-chart-wrap').style.display='block';
+  make('fat','ch-fat',{type:'bar',data:{labels:rows.map(r=>r.l),datasets:[
+    {label:'Fatura EDP',data:rows.map(r=>r.edp),backgroundColor:'rgba(255,107,107,.65)',borderRadius:4},
+    {label:'Estimativa app',data:rows.map(r=>r.app),backgroundColor:'rgba(78,205,196,.65)',borderRadius:4},
+  ]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{labels:{color:COL.muted,font:FONT(false),boxWidth:8}}},
+    scales:{x:{ticks:{color:COL.muted,font:FONT(false)},grid:{display:false}},y:{min:0,ticks:{color:COL.muted,font:FONT(false),callback:v=>v+'€'},grid:{color:COL.gridline}}}}});
+}
+function expandChart(kind){
+  if(!window.Chart) return;
+  $('chart-modal').style.display='flex';
+  st('big-title',kind==='tech'?'🔋 HOJE — BATERIA E REDE':'☀️ HOJE — SOLAR, CONSUMO E BATERIA');
+  requestAnimationFrame(()=>make('big','ch-big',kind==='tech'?techCfg(true):todayCfg(true)));
+}
+function closeChart(){$('chart-modal').style.display='none';kill('big');}
+
+// ═══════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════
+function toggleModo(){
+  const m=$('s-modo').value;
+  document.querySelectorAll('.bi-only').forEach(e=>e.style.display=m==='bi'?'flex':'none');
+  document.querySelectorAll('.simples-only').forEach(e=>e.style.display=m==='simples'?'flex':'none');
+}
+function renderTarList(){
+  const L=tarifas();
+  sethtml('tar-list',L.map((p,i)=>`<div class="tar-item"><span>desde ${fmtDY(p.from)} · ${p.modo==='simples'?'Simples '+nf(p.simplesNet,4):'FV '+nf(p.peakNet,4)+' · V '+nf(p.offNet,4)}</span>${i>0?`<button class="btn-del" onclick="delTarifa('${p.from}')" aria-label="Apagar">🗑</button>`:''}</div>`).join(''));
+}
+function loadSettingsInputs(){
+  const t=T(),p=tarifaEm(todayStr());
+  $('s-modo').value=p.modo;
+  $('s-peak-net').value=p.peakNet;$('s-off-net').value=p.offNet;$('s-simples-net').value=p.simplesNet??p.peakNet;
+  $('s-valid-from').value=todayStr();
+  $('s-disc').value=t.disc;$('s-disc-end').value=t.discEnd;$('s-kva').value=t.kva;$('s-pot-day').value=t.potDay;
+  $('s-upac').checked=t.upac;$('s-sell').value=t.sell;
+  $('s-invest').value=t.invest;$('s-install-date').value=t.installDate;
+  $('s-bat-cap').value=t.batCap;$('s-bat-min').value=t.batMin;
+  $('s-sm-url').value=smUrl();
+  toggleModo();renderTarList();updatePriceHints();renderConnStatus();
+}
+function updatePriceHints(){
+  const f=id=>{const v=parseFloat($(id).value);return isNum(v)?'c/ IVA: '+nf(v*CFG.IVA,4)+' €/kWh':'€/kWh';};
+  st('s-peak-disp',f('s-peak-net'));st('s-off-disp',f('s-off-net'));st('s-simples-disp',f('s-simples-net'));
+}
+function readNum(id,min,max){
+  const el=$(id),v=parseFloat(el.value);
+  const ok=isNum(v)&&v>=min&&v<=max;
+  el.classList.toggle('invalid',!ok);
+  return ok?v:null;
+}
+function afterSettingsChange(){TAR=null;AVG=null;renderDaySummary();if(S.page==='fin')renderFinTab();}
+function saveTarifa(){
+  const modo=$('s-modo').value,from=$('s-valid-from').value;
+  const peak=readNum('s-peak-net',0.01,2),off=readNum('s-off-net',0.01,2),simp=readNum('s-simples-net',0.01,2);
+  if(!isIso(from)){$('s-valid-from').classList.add('invalid');toast('Data inválida',true);return;}
+  $('s-valid-from').classList.remove('invalid');
+  if(modo==='bi'&&(peak===null||off===null)){toast('Preços inválidos',true);return;}
+  if(modo==='simples'&&simp===null){toast('Preço inválido',true);return;}
+  const nova={from,modo,peakNet:peak??simp,offNet:off??simp,simplesNet:simp??peak};
+  const atual=tarifaEm(from);
+  if(atual&&atual.modo===nova.modo&&atual.peakNet===nova.peakNet&&atual.offNet===nova.offNet&&(modo==='bi'||atual.simplesNet===nova.simplesNet)){toast('Sem alterações nos preços');return;}
+  const L=tarifas().filter(p=>p.from!==from);
+  L.push(nova);
+  if(!lsSet('tarifas_v2',JSON.stringify(L))){toast('Erro ao guardar',true);return;}
+  TAR=null;renderTarList();afterSettingsChange();
+  toast('Tarifa guardada (desde '+fmtDY(from)+')');
+}
+function delTarifa(from){
+  if(!confirm('Apagar a tarifa que começa a '+fmtDY(from)+'?')) return;
+  const L=tarifas().filter(p=>p.from!==from);
+  if(!L.length) return;
+  lsSet('tarifas_v2',JSON.stringify(L));TAR=null;renderTarList();afterSettingsChange();
+}
+function saveContrato(){
+  const disc=readNum('s-disc',0,100),kva=readNum('s-kva',1,100),pot=readNum('s-pot-day',0,20),sell=readNum('s-sell',0,1);
+  const end=$('s-disc-end').value;
+  if(!isIso(end)){$('s-disc-end').classList.add('invalid');}
+  if([disc,kva,pot,sell].includes(null)||!isIso(end)){toast('Há valores inválidos',true);return;}
+  $('s-disc-end').classList.remove('invalid');
+  lsSet('t_disc',disc);lsSet('t_disc_end',end);lsSet('t_kva',kva);lsSet('t_pot_day',pot);lsSet('t_sell',sell);
+  lsSet('upac_on',$('s-upac').checked?'1':'0');
+  afterSettingsChange();toast('Contrato guardado');
+}
+function saveInvest(){
+  const inv=readNum('s-invest',1,1000000),cap=readNum('s-bat-cap',1,500),min=readNum('s-bat-min',0,90);
+  const d=$('s-install-date').value;
+  const okD=isIso(d)&&d<=todayStr();$('s-install-date').classList.toggle('invalid',!okD);
+  if([inv,cap,min].includes(null)||!okD){toast('Há valores inválidos',true);return;}
+  const changedDate=d!==T().installDate;
+  lsSet('s_invest',inv);lsSet('s_install_date',d);lsSet('bat_cap',cap);lsSet('bat_min',min);
+  afterSettingsChange();renderTech();toast('Guardado');
+  if(changedDate) loadHistory();
+}
+function renderConnStatus(){
+  st('s-sm-status',!smUrl()?'Sem URL':S.sm.ok?'✅ Ligado '+fmtAge(Date.now()-S.sm.lastOk):S.sm.ok===false?'❌ '+S.sm.err:'—');
+  st('s-dy-status',S.dy.ok?'✅ Ligado '+fmtAge(Date.now()-S.dy.lastOk):S.dy.ok===false?'❌ '+S.dy.err:'Só usado se o SOLARMAN falhar');
+}
+async function testConnections(){
+  const url=$('s-sm-url').value.trim().replace(/\/+$/,'');
+  if(url&&!/^https:\/\/[^\s/]+\.[^\s/]+/.test(url)){$('s-sm-url').classList.add('invalid');toast('URL inválido',true);return;}
+  $('s-sm-url').classList.remove('invalid');
+  lsSet('sm_url',url);S.sm.retryAt=0;
+  const b=$('btn-test');b.disabled=true;b.textContent='⏳ A TESTAR...';
+  try{
+    if(url){try{const j=await smGet('/sm/ping',8000);if(!j.configured){S.sm.ok=false;S.sm.err='Worker sem credenciais SOLARMAN';}}catch(e){}}
+    try{await dyGet('/data',8000);}catch(e){}
+    renderConnStatus();
+    if(S.sm.ok){toast('SOLARMAN ligado ✅');refreshAll();}else toast(url?'SOLARMAN: '+S.sm.err:'Sem URL SOLARMAN — a usar Deye',!url?false:true);
+  }finally{b.disabled=false;b.textContent='⚡ GUARDAR E TESTAR LIGAÇÕES';}
+}
+
+// ─── CSV ───
+function exportCSV(){
+  const t=T(),today=todayStr();
+  const n=(v,d=3)=>isNum(v)?v.toFixed(d).replace('.',','):'';
+  const lines=['data;solar_kwh;consumo_kwh;rede_kwh;exportado_kwh;carga_bat_kwh;descarga_bat_kwh;solar_consumido_kwh;poupanca_eur;receita_upac_eur;fonte;preco_exato'];
+  let c=0;
+  for(const ds of dateRange(t.installDate,today)){
+    const d=S.days[ds];if(!hasDay(d)) continue;
+    const p=poupancaDia(ds,d);
+    lines.push([ds,n(d.pv),n(d.ld),n(d.gr),n(d.ex),n(d.bc),n(d.bd),n(p.kwh),n(p.eur,2),n(receitaDia(d),2),d.src,p.exact?'sim':'nao'].join(';'));c++;
+  }
+  if(!c){toast('Sem dados para exportar',true);return;}
+  const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='solar_diario_'+today+'.csv';
+  document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);
+  toast(c+' dias exportados');
+}
+
+// ═══════════════════════════════════════════════════════
+// NAVEGAÇÃO + ARRANQUE
+// ═══════════════════════════════════════════════════════
+function navTo(id){
+  S.page=id;
+  ['live','fin','tech','settings'].forEach(p=>{$('page-'+p).classList.toggle('active',p===id);$('nav-'+p).classList.toggle('active',p===id);});
+  if(id==='fin') renderFinTab();
+  if(id==='tech'){renderTech();renderDiag();}
+  if(id==='settings') loadSettingsInputs();
+  if(id==='live'||id==='tech') renderCharts();
+}
+
+function tick(){
+  const n=new Date();
+  st('clk',n.toLocaleTimeString('pt-PT'));
+  st('dstr',n.toLocaleDateString('pt-PT',{weekday:'short',day:'2-digit',month:'short'}));
+}
+function stopTimers(){APP.timers.forEach(clearInterval);APP.timers=[];}
+function startTimers(){
+  stopTimers();
+  APP.timers.push(
+    setInterval(loadLive,CFG.LIVE_MS),
+    setInterval(loadCurve,CFG.CURVE_MS),
+    setInterval(()=>{updateStatus();renderSun();if(Date.now()-S.hist.loadedAt>CFG.HIST_MS||S.hist.day!==todayStr())loadHistory();},30000),
+  );
+}
+async function refreshAll(){
+  await loadLive();
+  loadCurve();
+  loadHistory();
+}
+function initApp(){
+  migrateLegacy();tarifas();buildDots();
+  if(S.days[todayStr()]) S.today={...S.days[todayStr()],day:todayStr()};
+  renderDaySummary();renderSun();
+  startTimers();refreshAll();
+}
+
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState!=='visible'||!APP.key||$('app').style.display==='none') return;
+  loadLive();
+  if(!S.curve||Date.now()-(S.curve.loadedAt||0)>CFG.CURVE_MS) loadCurve();
+  if(S.hist.day!==todayStr()) loadHistory();
+});
+['s-peak-net','s-off-net','s-simples-net'].forEach(id=>$(id).addEventListener('input',updatePriceHints));
+$('fat-form').addEventListener('submit',onFaturaSubmit);
+$('lock-form').addEventListener('submit',e=>{e.preventDefault();const v=$('lock-pwd').value;if(v)tryUnlock(v);});
+window.addEventListener('error',e=>console.error('[APP]',e.message));
+
+// Faturas já conhecidas (só se ainda não existirem)
+(function(){
+  if(!lsGet('fatura_2026-04')) lsSet('fatura_2026-04',JSON.stringify({mes:'2026-04',economia:62.42,valor:null,kwh:94.5,ts:Date.now()}));
+  if(!lsGet('fatura_2026-05')) lsSet('fatura_2026-05',JSON.stringify({mes:'2026-05',economia:129.72,valor:87.09,kwh:241.95,ts:Date.now()}));
+})();
+
+// Chart.js
+(function(){
+  const s=document.createElement('script');
+  s.src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
+  s.onload=()=>{Chart.defaults.font.family="'JetBrains Mono', ui-monospace, monospace";Chart.defaults.color='#5A6785';renderCharts();if(S.page==='fin')renderFinTab();};
+  s.onerror=()=>toast('Não foi possível carregar os gráficos',true);
+  document.head.appendChild(s);
+})();
+
+setInterval(tick,1000);tick();
+if(APP.key){$('lock').style.display='none';$('app').style.display='flex';APP.started=true;initApp();}
+</script>
+</body>
+</html>
