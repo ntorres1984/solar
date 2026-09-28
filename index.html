@@ -1431,7 +1431,7 @@ function buildFlow(){
   ${node(160,38,'solar','sun')}${node(48,125,'bat','battery')}${node(272,125,'rede','grid')}${node(160,212,'casa','home')}
   <text x="194" y="32" class="fn-lbl">Solar</text><text x="194" y="50" class="fn-val" id="f-pv">—</text>
   <text x="194" y="206" class="fn-lbl">Casa</text><text x="194" y="224" class="fn-val" id="f-load">—</text>
-  <text x="48" y="166" class="fn-lbl" text-anchor="middle">Bateria</text><text x="48" y="184" class="fn-val" text-anchor="middle" id="f-bat">—</text>
+  <text x="48" y="166" class="fn-lbl" text-anchor="middle" id="f-bat-lbl">Bateria</text><text x="48" y="184" class="fn-val" text-anchor="middle" id="f-bat">—</text>
   <rect x="20" y="192" width="56" height="4" rx="2" style="fill:var(--t-bat)"/><rect id="f-bat-bar" x="20" y="192" width="0" height="4" rx="2" style="fill:var(--c-bat)"/>
   <text x="272" y="166" class="fn-lbl" text-anchor="middle">Rede</text><text x="272" y="184" class="fn-val" text-anchor="middle" id="f-grid">—</text>
   <text x="272" y="199" class="fn-sub" text-anchor="middle" id="f-grid-dir"></text>
@@ -1455,7 +1455,9 @@ function updateFlow(pv,ld,g,soc,b,temp){
   st('f-grid-dir',g>5?'a comprar':g<-5?'a exportar':'sem troca');
   st('f-bat-dir',on.bi?'a carregar':on.bo?'a descarregar':'em repouso');
   st('f-temp',isNum(temp)?nf(temp,1)+' °C':'');
-  if(isNum(soc)){st('f-bat',nf(soc,0)+'%');$('f-bat-bar').setAttribute('width',(56*clamp(soc,0,100)/100).toFixed(1));}
+  // Bateria como as outras ligações: potência em kW; a carga (%) vai no rótulo e na barra
+  st('f-bat',kw(b));
+  if(isNum(soc)){st('f-bat-lbl','Bateria '+nf(soc,0)+'%');$('f-bat-bar').setAttribute('width',(56*clamp(soc,0,100)/100).toFixed(1));}
 
   const item=(k,t)=>`<span><i class="dot" style="background:var(--c-${k})"></i>${esc(t)}</span>`;
   const leg=[];
