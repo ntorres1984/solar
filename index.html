@@ -178,6 +178,16 @@ button,input,select{font-family:inherit;font-size:inherit;color:inherit}
 .bal-note{font-size:12.5px;color:var(--text-2);line-height:1.5;background:var(--card-2);border-radius:10px;padding:10px 12px;margin-top:14px}
 .bal-note:empty{display:none}
 
+/* ═══ CONSUMO POR PERÍODO ═══ */
+.per-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+.per-row:last-child{border-bottom:none;padding-bottom:0}
+.per-row:first-child{padding-top:0}
+.per-t{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
+.per-t .ic{width:16px;height:16px;color:var(--text-2)}
+.per-h{font-size:12px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
+.per-s{font-size:12.5px;color:var(--text-2);margin-top:6px;line-height:1.5}
+.per-v{font-size:20px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums;letter-spacing:-.3px}
+
 /* ═══ KPIs ═══ */
 .kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
 .kpi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow);min-width:0}
@@ -426,6 +436,11 @@ select.settings-input{text-align:left;width:140px}
         <div class="bal-lbl" style="margin-top:18px"><span>Bateria hoje</span><b id="bal-bat">—</b></div>
         <div class="bal-leg" id="bal-bat-leg"></div>
         <div class="bal-note" id="bal-note"></div>
+      </section>
+      <section class="card" id="per-card">
+        <div class="card-h"><div><div class="card-t"><i data-ic="clock"></i>Consumo da casa por período</div><div class="card-s">Dia = do nascer ao pôr do sol · noite = do pôr ao nascer</div></div></div>
+        <div id="per-rows"><div class="small">A aguardar a curva do dia…</div></div>
+        <div class="small" id="per-src" style="margin-top:8px"></div>
       </section>
       <section class="card save-card">
         <div style="display:flex;gap:12px;align-items:center;min-width:0">
@@ -784,6 +799,7 @@ const ICONS={
   trash:'<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
   calendar:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
   pylon:'<path d="M7 22 12 3l5 19"/><path d="M4 7h16M5.5 12h13"/><path d="M9.5 12l5.3 6.5M14.5 12l-5.3 6.5"/>',
+  moon:'<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
   inverter:'<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h6"/><path d="m12.5 10-2.5 4h4l-2.5 4"/>',
 };
 function ic(name,cls='ic'){return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]||''}</svg>`;}
@@ -896,7 +912,7 @@ function sunTimes(date,lat,lon){
 // ESTADO + ARMAZENAMENTO LOCAL
 // ═══════════════════════════════════════════════════════
 const S={
-  live:null, today:null, curve:null, todayBuckets:null,
+  live:null, today:null, curve:null, todayBuckets:null, prevCurve:null,
   days:lsJSON('days_v2',{}),          // data → {pv,ld,gr,ex,bc,bd,src}
   sm:{ok:null,err:'',liveErr:'',retryAt:0,keys:null,missing:null,balance:null,lastOk:0},
   dy:{ok:null,err:'',lastOk:0},
@@ -1300,8 +1316,9 @@ async function loadCurve(){
         S.curve={src:'sm',date:today,loadedAt:Date.now(),
           pts:rows.map(r=>({x:hourOf(r[0]),pv:r[1],ld:r[2],grid:r[3],bat:r[4],soc:r[5]}))};
         S.todayBuckets=bucketsFromRows(rows);
-        renderCharts();renderDaySummary();
+        renderCharts();renderDaySummary();renderPeriodos();
         if(S.page==='fin') renderFinTab();
+        loadPrevCurve();
         return;
       }
     }catch(e){ if(e.status===401) return; console.warn('[SM curva]',e.message); }
@@ -1313,9 +1330,21 @@ async function loadCurve(){
       S.curve={src:'dy',date:today,loadedAt:Date.now(),
         pts:j.points.filter(p=>isNum(p.h)&&p.h<=hNow).map(p=>({x:p.h,pv:p.pv,ld:p.ld,grid:p.wire,bat:p.batP,soc:p.bat}))};
       S.todayBuckets=null;
-      appendLivePoint();renderCharts();
+      appendLivePoint();renderCharts();renderPeriodos();
     }
   }catch(e){console.warn('[DY curva]',e.message);}
+}
+// Curva de ontem (só para a noite passada: do pôr do sol de ontem à meia-noite). Um pedido por dia.
+async function loadPrevCurve(){
+  const y=addDays(todayStr(),-1);
+  if(S.prevCurve&&S.prevCurve.date===y||!smAvailable()) return;
+  try{
+    const j=await smGet('/sm/day?date='+y,20000);
+    if(Array.isArray(j.rows)&&j.rows.length){
+      S.prevCurve={date:y,pts:fixRows(j.rows).map(r=>({x:hourOf(r[0]),pv:r[1],ld:r[2],grid:r[3],bat:r[4]}))};
+      renderPeriodos();
+    }
+  }catch(e){ console.warn('[SM curva ontem]',e.message); }
 }
 function appendLivePoint(){
   if(!S.curve||!S.live||S.curve.date!==todayStr()) return;
@@ -1530,12 +1559,23 @@ function balancoDia(d){
   return {ld,pv,bc:v('bc'),bd,daRede,daBat,doSolar,paraCasa,paraBat,exportado};
 }
 function renderBalanco(d){
-  const b=balancoDia(d);
-  const bar=(id,parts,tot)=>sethtml(id,tot>0.05?parts.filter(p=>p[1]>0.05).map(p=>`<div style="flex:${p[1].toFixed(3)} 1 0;background:var(--c-${p[0]})" title="${esc(p[2])}"></div>`).join(''):'');
-  const leg=(id,parts,tot)=>sethtml(id,parts.map(p=>`<div><span class="key ${p[0]}"></span>${esc(p[2])}<b>${nf(p[1],1)} kWh${tot>0.05?' · '+nf(p[1]/tot*100,0)+'%':''}</b></div>`).join(''));
+  const b=balancoDia(d),t=T();
+  // Percurso da carga (curva de 5 min): meia-noite → mínimo → agora
+  const sp=S.curve&&S.curve.date===todayStr()?S.curve.pts.filter(p=>isNum(p.soc)):[];
+  const p0=sp.length>3&&sp[0].x<1?sp[0]:null;
+  const pMin=p0?sp.reduce((a,p)=>p.soc<a.soc?p:a,p0):null, pN=sp.length?sp[sp.length-1]:null;
+  // Energia da bateria gasta até ao mínimo da manhã = guardada no dia anterior
+  const ontem=p0&&pMin&&pMin.x>p0.x&&pMin.soc<p0.soc?Math.min(b.daBat,(p0.soc-pMin.soc)/100*t.batCap):0;
+  const hoje=Math.max(0,b.daBat-ontem);
+  // p = [cor, kWh, rótulo, esbatido]
+  const seg=p=>`<div style="flex:${p[1].toFixed(3)} 1 0;background:var(--c-${p[0]})${p[3]?';opacity:.5':''}" title="${esc(p[2])}"></div>`;
+  const bar=(id,parts,tot)=>sethtml(id,tot>0.05?parts.filter(p=>p[1]>0.05).map(seg).join(''):'');
+  const leg=(id,parts,tot)=>sethtml(id,parts.map(p=>`<div><span class="key ${p[0]}"${p[3]?' style="opacity:.5"':''}></span>${esc(p[2])}<b>${nf(p[1],1)} kWh${tot>0.05?' · '+nf(p[1]/tot*100,0)+'%':''}</b></div>`).join(''));
   // A carga da bateria não é consumo da casa: fica em "para onde foi o solar" e em "Bateria hoje"
-  const src=[['solar',b.doSolar,'Do solar, na hora'],['bat',b.daBat,'Da bateria (energia guardada)'],['rede',b.daRede,'Da rede']];
-  const dst=[['casa',b.paraCasa,'Para a casa, na hora'],['bat',b.paraBat,'Para a bateria (guardado)'],['rede',b.exportado,'Para a rede']];
+  const src=ontem>0.5
+    ?[['solar',b.doSolar,'Do solar de hoje, na hora'],['bat',ontem,'Da bateria · solar guardado ontem',1],['bat',hoje,'Da bateria · solar de hoje'],['rede',b.daRede,'Da rede']]
+    :[['solar',b.doSolar,'Do solar de hoje, na hora'],['bat',b.daBat,'Da bateria (solar guardado)'],['rede',b.daRede,'Da rede']];
+  const dst=[['casa',b.paraCasa,'Para a casa, na hora'],['bat',b.paraBat,'Para a bateria (para mais tarde)'],['rede',b.exportado,'Para a rede']];
   st('bal-ld',fkwh(b.ld));st('bal-pv',fkwh(b.pv));
   bar('bal-src',src,b.ld);leg('bal-src-leg',src,b.ld);
   bar('bal-dst',dst,b.pv);leg('bal-dst-leg',dst,b.pv);
@@ -1543,20 +1583,71 @@ function renderBalanco(d){
   st('bal-bat',(saldo>=0?'+':'−')+nf(Math.abs(saldo),1)+' kWh');
   sethtml('bal-bat-leg',[['bat',b.bc,'Entrou (carga)'],['bat',b.bd,'Saiu para a casa (descarga)']]
     .map(p=>`<div><span class="key ${p[0]}"></span>${esc(p[2])}<b>${nf(p[1],1)} kWh</b></div>`).join(''));
-  // Percurso da carga ao longo do dia (curva de 5 min): meia-noite → mínimo → agora
-  const t=T(),sp=S.curve&&S.curve.date===todayStr()?S.curve.pts.filter(p=>isNum(p.soc)):[];
-  const p0=sp.length>3&&sp[0].x<1?sp[0]:null;
-  const pMin=p0?sp.reduce((a,p)=>p.soc<a.soc?p:a,p0):null, pN=sp.length?sp[sp.length-1]:null;
   const partes=[];
   if(p0&&pN) partes.push('Carga da bateria: '+nf(p0.soc,0)+'% à meia-noite'+(pMin.soc<p0.soc-2&&pMin!==pN?' → '+nf(pMin.soc,0)+'% às '+hLabel(pMin.x)+' (mínimo)':'')+' → '+nf(pN.soc,0)+'% às '+hLabel(pN.x)+'.');
-  if(b.daBat>0.5){
-    const noite=p0&&pMin&&pMin.x>p0.x&&pMin.soc<p0.soc?Math.min(b.daBat,(p0.soc-pMin.soc)/100*t.batCap):0;
-    partes.push(noite>0.5
-      ?'Dos '+nf(b.daBat,1)+' kWh que a bateria deu à casa, ≈ '+nf(noite,1)+' kWh foram gastos até às '+hLabel(pMin.x)+' com energia guardada ontem'+(b.daBat-noite>0.3?'; os outros ≈ '+nf(b.daBat-noite,1)+' kWh em momentos com pouco sol.':'.')
-      :'A bateria deu '+nf(b.daBat,1)+' kWh à casa com energia solar guardada antes.');
-  }
-  if(b.bc>0.5) partes.push('Os '+nf(b.bc,1)+' kWh que entraram na bateria não fazem parte dos '+nf(b.ld,1)+' kWh da casa nem da poupança de hoje: contam quando a casa os gastar.');
+  if(ontem>0.5) partes.push('Até às '+hLabel(pMin.x)+' a casa gastou ≈ '+nf(ontem,1)+' kWh de solar guardado ontem; dos '+nf(b.paraBat,1)+' kWh guardados hoje, o que a casa gastar depois da meia-noite conta no balanço de amanhã.');
+  else if(b.bc>0.5) partes.push('Os '+nf(b.paraBat,1)+' kWh guardados hoje na bateria vão ser gastos mais tarde e contam nesse momento.');
+  partes.push('Para a poupança, cada kWh solar conta uma só vez: quando a casa o gasta.');
   st('bal-note',partes.join(' '));
+}
+
+// ─── Consumo da casa por período (dia solar / noite), integrado da curva de 5 min ───
+// Não altera as contas por dia: é só informação. Energia em kWh; bateria + = descarga; rede + = compra.
+function integrar(pts,a,b,cap){
+  const r={ld:0,pv:0,imp:0,dis:0,n:0,h:0};
+  for(let i=0;i<pts.length;i++){
+    const p=pts[i];
+    if(p.live||p.x<a||p.x>=b||!isNum(p.ld)) continue;
+    const nx=pts[i+1]&&!pts[i+1].live?pts[i+1].x:p.x+Math.min(cap,1/12);
+    const dt=Math.max(0,Math.min(nx-p.x,cap,b-p.x));
+    r.ld+=Math.max(0,p.ld)*dt/1000;
+    r.pv+=(isNum(p.pv)?Math.max(0,p.pv):0)*dt/1000;
+    r.imp+=(isNum(p.grid)&&p.grid>0?p.grid:0)*dt/1000;
+    r.dis+=(isNum(p.bat)&&p.bat>0?p.bat:0)*dt/1000;
+    r.h+=dt;r.n++;
+  }
+  r.imp=Math.min(r.imp,r.ld);r.dis=Math.min(r.dis,r.ld-r.imp);r.sol=Math.max(0,r.ld-r.imp-r.dis);
+  return r;
+}
+const hOfDate=d=>d.getHours()+d.getMinutes()/60;
+function renderPeriodos(){
+  const box=$('per-rows');if(!box) return;
+  const C=S.curve;
+  if(!C||C.date!==todayStr()||!C.pts.length){sethtml('per-rows','<div class="small">Sem curva do dia disponível.</div>');st('per-src','');return;}
+  const cap=C.src==='sm'?0.25:1.05;
+  const now=new Date(),hNow=hOfDate(now);
+  const sT=sunTimes(now,CFG.lat,CFG.lon),yD=pdate(addDays(todayStr(),-1)),sY=sunTimes(yD,CFG.lat,CFG.lon);
+  if(!sT||!sY) return;
+  const rise=hOfDate(sT.rise),set=hOfDate(sT.set),setY=hOfDate(sY.set),riseY=hOfDate(sY.rise);
+  const P=S.prevCurve&&S.prevCurve.date===addDays(todayStr(),-1)?S.prevCurve.pts:null;
+  const soma=(a,b)=>({ld:a.ld+b.ld,pv:a.pv+b.pv,imp:a.imp+b.imp,dis:a.dis+b.dis,sol:a.sol+b.sol,h:a.h+b.h,n:a.n+b.n});
+  const hh=h=>hLabel(h);
+  const rows=[];
+  // Noite: pôr do sol de ontem → nascer de hoje (ou até agora, se ainda for noite)
+  const fimNoite=Math.min(rise,hNow);
+  const madrugada=integrar(C.pts,0,fimNoite,cap);
+  if(P){
+    rows.push({ic:'moon',t:hNow<rise?'Noite (até agora)':'Noite passada',h:hh(setY)+' → '+(hNow<rise?'agora':hh(rise)),r:soma(integrar(P,setY,24,0.25),madrugada)});
+  }else if(madrugada.n){
+    rows.push({ic:'moon',t:hNow<rise?'Madrugada (até agora)':'Madrugada',h:'00:00 → '+(hNow<rise?'agora':hh(rise)),r:madrugada,parcial:true});
+  }
+  // Dia solar: nascer → pôr do sol (hoje; antes do nascer mostra o de ontem)
+  if(hNow>=rise){
+    rows.push({ic:'sun',t:hNow<set?'Período solar (até agora)':'Período solar',h:hh(rise)+' → '+(hNow<set?'agora':hh(set)),r:integrar(C.pts,rise,Math.min(set,hNow),cap),solar:true});
+  }else if(P){
+    rows.push({ic:'sun',t:'Período solar de ontem',h:hh(riseY)+' → '+hh(setY),r:integrar(P,riseY,setY,0.25),solar:true});
+  }
+  // Esta noite: pôr do sol → agora
+  if(hNow>set) rows.push({ic:'moon',t:'Esta noite (até agora)',h:hh(set)+' → agora',r:integrar(C.pts,set,hNow,cap)});
+  const parte=(v,l)=>v>=0.05?l+' '+nf(v,1):null;
+  sethtml('per-rows',rows.map(x=>{
+    const r=x.r,med=r.h>0.1?r.ld/r.h:null;
+    const origem=[parte(r.sol,'solar'),parte(r.dis,'bateria'),parte(r.imp,'rede')].filter(Boolean).join(' · ')||'—';
+    return `<div class="per-row"><div style="min-width:0"><div class="per-t">${ic(x.ic)}${esc(x.t)}</div><div class="per-h">${esc(x.h)}${med!==null?' · média '+nf(med,2)+' kW':''}</div>`+
+      `<div class="per-s">Veio de: ${esc(origem)} kWh${x.solar&&r.pv>=0.05?'<br>O solar produziu '+nf(r.pv,1)+' kWh neste período':''}${x.parcial?'<br>Falta a parte de ontem depois do pôr do sol (curva de ontem indisponível)':''}</div></div>`+
+      `<div class="per-v">${nf(r.ld,1)} kWh</div></div>`;
+  }).join('')||'<div class="small">Sem dados suficientes.</div>');
+  st('per-src',(C.src==='sm'?'Calculado com a curva de 5 min do SOLARMAN':'Calculado com 1 leitura por hora (Deye) — aproximado')+' · pode diferir ligeiramente dos totais do contador.');
 }
 
 function updateStatus(){
