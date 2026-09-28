@@ -416,13 +416,15 @@ select.settings-input{text-align:left;width:140px}
         <div class="kpi"><div class="kpi-l"><span class="key bat"></span>Bateria descarregada</div><div class="kpi-v" id="t-bd">—</div></div>
       </div>
       <section class="card" id="bal-card">
-        <div class="card-h"><div><div class="card-t"><i data-ic="activity"></i>Balanço do dia</div><div class="card-s">De onde veio a energia da casa e para onde foi o solar</div></div></div>
+        <div class="card-h"><div><div class="card-t"><i data-ic="activity"></i>Balanço do dia</div><div class="card-s">De onde veio a energia da casa e para onde foi o solar · carregar a bateria não é consumo</div></div></div>
         <div class="bal-lbl"><span>A casa consumiu</span><b id="bal-ld">—</b></div>
         <div class="sbar" id="bal-src" role="img" aria-label="Origem da energia consumida"></div>
         <div class="bal-leg" id="bal-src-leg"></div>
         <div class="bal-lbl" style="margin-top:18px"><span>O solar produziu</span><b id="bal-pv">—</b></div>
         <div class="sbar" id="bal-dst" role="img" aria-label="Destino da energia solar"></div>
         <div class="bal-leg" id="bal-dst-leg"></div>
+        <div class="bal-lbl" style="margin-top:18px"><span>Bateria hoje</span><b id="bal-bat">—</b></div>
+        <div class="bal-leg" id="bal-bat-leg"></div>
         <div class="bal-note" id="bal-note"></div>
       </section>
       <section class="card save-card">
@@ -1515,7 +1517,7 @@ function renderDaySummary(){
   if(hasDay(d)){
     const p=poupancaDia(todayStr(),d);
     st('t-sav',eur(p.eur));
-    st('t-sav-s',nf(p.kwh,1)+' kWh do solar/bateria · '+(p.exact?'preço de cada momento':'Fora Vazio/Vazio estimado'));
+    st('t-sav-s',nf(p.kwh,1)+' kWh gastos pela casa sem comprar à rede · '+(p.exact?'preço de cada momento':'Fora Vazio/Vazio estimado'));
   }
 }
 
@@ -1525,26 +1527,27 @@ function balancoDia(d){
   const ld=v('ld'),gr=v('gr'),bd=v('bd'),pv=v('pv'),ex=v('ex');
   const daRede=Math.min(gr,ld), daBat=Math.min(bd,ld-daRede), doSolar=Math.max(0,ld-daRede-daBat);
   const paraCasa=Math.min(doSolar,pv), exportado=Math.min(ex,pv-paraCasa), paraBat=Math.max(0,pv-paraCasa-exportado);
-  return {ld,pv,daRede,daBat,doSolar,paraCasa,paraBat,exportado};
+  return {ld,pv,bc:v('bc'),bd,daRede,daBat,doSolar,paraCasa,paraBat,exportado};
 }
 function renderBalanco(d){
   const b=balancoDia(d);
   const bar=(id,parts,tot)=>sethtml(id,tot>0.05?parts.filter(p=>p[1]>0.05).map(p=>`<div style="flex:${p[1].toFixed(3)} 1 0;background:var(--c-${p[0]})" title="${esc(p[2])}"></div>`).join(''):'');
   const leg=(id,parts,tot)=>sethtml(id,parts.map(p=>`<div><span class="key ${p[0]}"></span>${esc(p[2])}<b>${nf(p[1],1)} kWh${tot>0.05?' · '+nf(p[1]/tot*100,0)+'%':''}</b></div>`).join(''));
-  const src=[['solar',b.doSolar,'Solar direto'],['bat',b.daBat,'Bateria'],['rede',b.daRede,'Rede']];
-  const dst=[['casa',b.paraCasa,'Consumido na hora'],['bat',b.paraBat,'Guardado na bateria'],['rede',b.exportado,'Exportado para a rede']];
+  // A carga da bateria não é consumo da casa: fica em "para onde foi o solar" e em "Bateria hoje"
+  const src=[['solar',b.doSolar,'Do solar, na hora'],['bat',b.daBat,'Da bateria (energia guardada)'],['rede',b.daRede,'Da rede']];
+  const dst=[['casa',b.paraCasa,'Para a casa, na hora'],['bat',b.paraBat,'Para a bateria (guardado)'],['rede',b.exportado,'Para a rede']];
   st('bal-ld',fkwh(b.ld));st('bal-pv',fkwh(b.pv));
   bar('bal-src',src,b.ld);leg('bal-src-leg',src,b.ld);
   bar('bal-dst',dst,b.pv);leg('bal-dst-leg',dst,b.pv);
-  let note='';
-  if(b.daBat>0.5){
-    const t=T(),p0=S.curve&&S.curve.date===todayStr()?S.curve.pts.find(p=>isNum(p.soc)&&p.x<1):null;
-    note='A bateria deu '+nf(b.daBat,1)+' kWh à casa'+(p0?' (começou o dia com '+nf(p0.soc,0)+'%, ≈ '+nf(Math.max(0,(p0.soc-t.batMin)/100*t.batCap),1)+' kWh úteis guardados na véspera)':'')+
-      '. Cada kWh solar conta para a poupança no momento em que é consumido — o que foi guardado ontem conta hoje e não é contado duas vezes.';
-  }else if(b.pv>0.05&&b.paraBat>0.5){
-    note=nf(b.paraBat,1)+' kWh ficaram guardados na bateria: contam para a poupança quando forem consumidos (esta noite ou amanhã).';
-  }
-  st('bal-note',note);
+  const saldo=b.bc-b.bd;
+  st('bal-bat',(saldo>=0?'+':'−')+nf(Math.abs(saldo),1)+' kWh');
+  sethtml('bal-bat-leg',[['bat',b.bc,'Entrou (carga)'],['bat',b.bd,'Saiu para a casa (descarga)']]
+    .map(p=>`<div><span class="key ${p[0]}"></span>${esc(p[2])}<b>${nf(p[1],1)} kWh</b></div>`).join(''));
+  const t=T(),p0=S.curve&&S.curve.date===todayStr()?S.curve.pts.find(p=>isNum(p.soc)&&p.x<1):null;
+  const partes=[];
+  if(b.bc>0.5) partes.push('Os '+nf(b.bc,1)+' kWh que entraram na bateria não são consumo da casa nem poupança de hoje: só contam quando a casa os gastar (esta noite ou amanhã).');
+  if(b.daBat>0.5) partes.push('Os '+nf(b.daBat,1)+' kWh que a bateria deu à casa'+(p0?' vieram sobretudo da carga de ontem (começou o dia com '+nf(p0.soc,0)+'%, ≈ '+nf(Math.max(0,(p0.soc-t.batMin)/100*t.batCap),1)+' kWh úteis)':' vieram de energia solar guardada antes')+' — contam hoje, uma só vez.');
+  st('bal-note',partes.join(' '));
 }
 
 function updateStatus(){
