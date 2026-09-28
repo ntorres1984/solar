@@ -471,16 +471,17 @@ button{font-family:inherit}
       <div class="itp" id="itp-fat">
         <div class="card" style="border-color:rgba(78,205,196,.2)">
           <div class="card-label" style="color:var(--accent)">📥 REGISTAR FATURA EDP</div>
-          <div class="small" style="margin-bottom:12px">Serve para validar a app: compara os kWh e o valor da fatura (ciclo 23→22) com o que a app mediu, e a "Economia" da app Deye (mês civil) com a poupança calculada aqui.</div>
+          <div class="small" style="margin-bottom:12px">Cada fatura (ciclo 23→22) corrige a app: os kWh comprados à rede passam a ser os do contador EDP, a repartição Vazio/Fora Vazio passa a ser a real e o valor serve para validar a estimativa.</div>
           <form id="fat-form" novalidate>
             <div class="form-grid">
               <div><div class="f-lbl">MÊS DA FATURA</div><input id="fat-mes" class="f-in" type="month" required></div>
               <div><div class="f-lbl">VALOR FATURA (€)</div><input id="fat-valor" class="f-in" type="number" step="0.01" min="0" inputmode="decimal" placeholder="87.09"></div>
             </div>
             <div class="form-grid">
-              <div><div class="f-lbl">kWh DA REDE (FATURA)</div><input id="fat-kwh" class="f-in" type="number" step="0.1" min="0" inputmode="decimal" placeholder="249"></div>
-              <div><div class="f-lbl" style="color:var(--euro)">ECONOMIA APP DEYE (€)</div><input id="fat-economia" class="f-in" type="number" step="0.01" min="0" inputmode="decimal" placeholder="129.72"></div>
+              <div><div class="f-lbl">kWh VAZIO (FATURA)</div><input id="fat-kwhv" class="f-in" type="number" step="1" min="0" inputmode="numeric" placeholder="89"></div>
+              <div><div class="f-lbl">kWh FORA VAZIO (FATURA)</div><input id="fat-kwhfv" class="f-in" type="number" step="1" min="0" inputmode="numeric" placeholder="35"></div>
             </div>
+            <div style="margin-bottom:8px"><div class="f-lbl" style="color:var(--euro)">ECONOMIA APP DEYE NO MÊS (€) · opcional</div><input id="fat-economia" class="f-in" type="number" step="0.01" min="0" inputmode="decimal" placeholder="129.72"></div>
             <div id="fat-err" class="small" style="color:var(--red);min-height:14px"></div>
             <button type="submit" class="settings-btn gold" style="margin-top:4px">+ GUARDAR FATURA</button>
           </form>
@@ -814,7 +815,7 @@ function sunTimes(date,lat,lon){
 const S={
   live:null, today:null, curve:null, todayBuckets:null,
   days:lsJSON('days_v2',{}),          // data → {pv,ld,gr,ex,bc,bd,src}
-  sm:{ok:null,err:'',retryAt:0,keys:null,missing:null,balance:null,lastOk:0},
+  sm:{ok:null,err:'',liveErr:'',retryAt:0,keys:null,missing:null,balance:null,lastOk:0},
   dy:{ok:null,err:'',lastOk:0},
   hist:{loadedAt:0,day:'',smErr:'',loading:false},
   backfill:{running:false,done:0,total:0,fail:0},
@@ -893,6 +894,7 @@ function shareFV(ds,kind){
     const f=kind==='s'?b.sF:b.iF, v=kind==='s'?b.sV:b.iV;
     if(f+v>0.05) return {fv:f/(f+v),exact:true};
   }
+  if(kind==='i'){ const fs=invoiceShare(ds); if(fs!==null) return {fv:fs,exact:false}; }
   const a=avgShares()[dayType(ds)];
   if(a&&isNum(a[kind])) return {fv:a[kind],exact:false};
   return {fv:fvFraction(ds),exact:false};
@@ -910,10 +912,48 @@ function custoRedeDia(ds,d){
   return {kwh:g,fv:g*sh.fv,vz:g*(1-sh.fv),eur:g*(sh.fv*precoKwh(ds,true)+(1-sh.fv)*precoKwh(ds,false)),exact:sh.exact};
 }
 
+// ─── Faturas EDP: repartição real e correção da compra à rede ──
+let FATC=null;
+function fatCache(){
+  if(FATC) return FATC;
+  FATC=fatAll().map(f=>{const c=cicloDaFatura(f.mes);return {...f,ini:c.ini,fim:c.fim};});
+  return FATC;
+}
+// Fração Fora Vazio da energia comprada: a da fatura do próprio ciclo, senão a média das faturas
+function invoiceShare(ds){
+  const L=fatCache().filter(f=>isNum(f.kwhFV)&&isNum(f.kwh)&&f.kwh>0);
+  if(!L.length) return null;
+  const own=L.find(f=>ds>=f.ini&&ds<=f.fim);
+  if(own) return own.kwhFV/own.kwh;
+  const tot=L.reduce((a,f)=>a+f.kwh,0);
+  return tot>0?L.reduce((a,f)=>a+f.kwhFV,0)/tot:null;
+}
+// Ciclos faturados com todos os dias medidos: diferença entre o contador EDP e a app
+function ciclosFaturados(){
+  const today=todayStr(),inst=T().installDate,out=[];
+  for(const f of fatCache()){
+    if(!isNum(f.kwh)||f.fim>=today||f.ini<inst) continue;
+    const dias=dateRange(f.ini,f.fim);
+    if(!dias.every(ds=>hasDay(S.days[ds]))) continue;
+    const app=dias.reduce((a,ds)=>a+(S.days[ds].gr||0),0);
+    const sh=isNum(f.kwhFV)&&f.kwh>0?f.kwhFV/f.kwh:(invoiceShare(f.fim)??0.25);
+    const preco=sh*precoKwh(f.fim,true)+(1-sh)*precoKwh(f.fim,false);
+    const delta=f.kwh-app;
+    out.push({mes:f.mes,ini:f.ini,fim:f.fim,edp:f.kwh,app,delta,preco,eur:-delta*preco});
+  }
+  return out;
+}
+function fatorRede(){
+  const C=ciclosFaturados();
+  const app=C.reduce((a,c)=>a+c.app,0),edp=C.reduce((a,c)=>a+c.edp,0);
+  return app>1?clamp(edp/app,0.5,3):1;
+}
+
 // Estimativa da fatura EDP de um ciclo. projetar=true extrapola a energia para o ciclo completo
 // (o dia de hoje, incompleto, não entra na projeção quando já há outros dias).
-function estimarFatura(ini,fim,projetar){
+function estimarFatura(ini,fim,projetar,calibrar=false){
   const t=T(),today=todayStr(),dias=dateRange(ini,fim),N=dias.length;
+  const fr=calibrar?fatorRede():1;
   const lst=[];
   for(const ds of dias){
     if(ds>today) break;
@@ -929,35 +969,38 @@ function estimarFatura(ini,fim,projetar){
     enNet+=p.modo==='simples'?g*p.simplesNet*(1-disc):(f*p.peakNet+v*p.offNet)*(1-disc);
   }
   const n=use.length;
-  const k=projetar&&n>0?N/n:1, frac=projetar?1:Math.min(1,n/N);
+  const k=(projetar&&n>0?N/n:1)*fr, frac=projetar?1:Math.min(1,n/N);
   const energia=enNet*k, pot=t.potDay*(projetar?N:n), dgeg=CFG.DGEG*frac, iec=kwh*k*CFG.IEC;
   const base=energia+pot+dgeg+iec, iva=base*(CFG.IVA-1), cav=CFG.CAV*frac;
-  return {total:base+iva+cav,energia,pot,dgeg,iec,iva,cav,kwh:kwh*k,fv:fv*k,vz:vz*k,n,N,exact};
+  return {total:base+iva+cav,energia,pot,dgeg,iec,iva,cav,kwh:kwh*k,fv:fv*k,vz:vz*k,n,N,exact,fr};
 }
 
 function calcAmort(){
   const t=T(),today=todayStr();
   if(!isIso(t.installDate)||t.installDate>today) return null;
   const dias=dateRange(t.installDate,today);
-  let eurS=0,rev=0,kwhS=0,n=0,exact=0,eurFull=0,nFull=0,prev=null,gs=null;
+  let eurS=0,rev=0,kwhS=0,n=0,exact=0,eurFull=0,nFull=0,prev=null,gs=null,aj=0;
   const gaps=[],serie=[],last30=[];
+  const ciclos=ciclosFaturados(),ajMap={};
+  for(const c of ciclos) ajMap[c.fim]=(ajMap[c.fim]||0)+c.eur;
   for(const ds of dias){
     const d=S.days[ds];
+    if(ajMap[ds]){aj+=ajMap[ds];eurFull+=ajMap[ds];}
     if(hasDay(d)){
       const p=poupancaDia(ds,d),r=receitaDia(d);
       eurS+=p.eur;rev+=r;kwhS+=p.kwh;n++;if(p.exact)exact++;
       if(ds!==today){eurFull+=p.eur+r;nFull++;if(daysBetween(ds,today)<=30)last30.push(p.eur+r);}
       if(gs){gaps.push([gs,prev]);gs=null;}
     }else if(ds!==today){ if(!gs) gs=ds; }
-    serie.push({x:daysBetween(t.installDate,ds),y:eurS+rev});
+    serie.push({x:daysBetween(t.installDate,ds),y:eurS+rev+aj});
     prev=ds;
   }
   if(gs&&gs!==today) gaps.push([gs,addDays(today,-1)]);
-  const total=eurS+rev, media=nFull?eurFull/nFull:0;
+  const total=eurS+rev+aj, media=nFull?eurFull/nFull:0;
   const ritmo30=last30.length?last30.reduce((a,b)=>a+b,0)/last30.length:null;
   const falta=Math.max(0,t.invest-total);
   const diasFalta=media>0?Math.ceil(falta/media):null;
-  return {total,eurS,rev,kwhS,n,exact,nFull,media,ritmo30,falta,diasFalta,
+  return {total,eurS,rev,aj,ciclos,kwhS,n,exact,nFull,media,ritmo30,falta,diasFalta,
     pct:t.invest>0?Math.min(100,total/t.invest*100):0,
     diasSistema:dias.length,gaps,serie,invest:t.invest,installDate:t.installDate};
 }
@@ -1063,10 +1106,11 @@ async function loadLive(){
       const j=await smGet('/sm/live');
       S.sm.keys=j.keys||null;S.sm.missing=j.missing||[];S.sm.balance=isNum(j.balanceW)?j.balanceW:null;
       S.live={src:'SOLARMAN',ts:j.ts||Date.now(),pvW:j.pvW,ldW:j.ldW,gridW:j.gridW,batW:j.batW,soc:j.soc,tempC:j.tempC};
+      S.sm.liveErr='';
       const td=j.today||{};
       if(isNum(td.ld)&&td.day===todayStr()) setToday(td,'sm');
       fresh=Date.now()-S.live.ts<20*60000;
-    }catch(e){ if(e.status===401) return; console.warn('[SM live]',e.message); }
+    }catch(e){ if(e.status===401) return; S.sm.liveErr=e.message; console.warn('[SM live]',e.message); }
   }
   if(!fresh){
     try{
@@ -1132,7 +1176,9 @@ async function loadHistory(force=false){
       try{
         const j=await smGet('/sm/days?from='+t.installDate+'&to='+today,30000);
         for(const r of j.days||[]){ if(r.date!==today&&isIso(r.date)&&(isNum(r.ld)||isNum(r.pv))) putDay(r.date,r,'sm'); }
-        S.hist.smErr=(j.errors||[]).map(e=>fmtMes(e.month)+': '+e.error).join(' · ');
+        const byErr={};
+        for(const e of j.errors||[]) (byErr[e.error]=byErr[e.error]||[]).push(fmtMes(e.month));
+        S.hist.smErr=Object.entries(byErr).map(([er,ms])=>(ms.length>2?ms[0]+' a '+ms[ms.length-1]:ms.join(', '))+': '+er.replace(/^SOLARMAN \S+: /,'')).join(' · ');
       }catch(e){ if(e.status===401) return; S.hist.smErr=e.message; }
     }
     // Worker Deye só guarda 90 dias: usado apenas para preencher dias sem dados SOLARMAN
@@ -1347,7 +1393,7 @@ function renderDiag(){
   const slots=days.filter(ds=>SLOTS[ds]&&isNum(SLOTS[ds].sF)).length;
   const rows=[
     ['Tempo real',L?L.src+' · '+fmtAge(Date.now()-L.ts):'—'],
-    ['Worker SOLARMAN',S.sm.ok?'✅ ligado':S.sm.ok===false?'❌ '+S.sm.err:'—'],
+    ['Worker SOLARMAN',S.sm.liveErr?'⚠ autenticado, mas sem dados: '+S.sm.liveErr.replace(/^SOLARMAN \S+: /,''):S.sm.ok?'✅ dados em tempo real':S.sm.ok===false?'❌ '+S.sm.err:'—'],
     ['Worker Deye',S.dy.ok?'✅ ligado':S.dy.ok===false?'❌ '+S.dy.err:'não usado'],
   ];
   if(isNum(S.sm.balance)&&L&&L.src==='SOLARMAN'){
@@ -1487,8 +1533,12 @@ function renderRetorno(){
   const rows=[
     ['Fórmula diária','(consumo − rede) × preço da rede'],
     ['Energia solar/bateria consumida',nf(a.kwhS,0)+' kWh'],
-    ['Poupança na fatura','+'+eur(a.eurS)],
+    ['Poupança (medição do inversor)','+'+eur(a.eurS)],
   ];
+  if(a.ciclos.length){
+    const dk=a.ciclos.reduce((s,c)=>s+c.delta,0);
+    rows.push(['Correção pelas faturas EDP',(a.aj>=0?'+':'')+eur(a.aj)+' · '+a.ciclos.length+' ciclo(s): contador EDP '+(dk>=0?'+':'')+nf(dk,0)+' kWh de rede']);
+  }else rows.push(['Correção pelas faturas EDP','sem ciclos faturados com todos os dias medidos']);
   if(t.upac) rows.push(['Receita UPAC','+'+eur(a.rev)]);
   rows.push(['Ritmo últimos 30 dias',a.ritmo30!==null?eur(a.ritmo30)+'/dia':'—']);
   rows.push(['Dias com dados',a.n+' de '+a.diasSistema]);
@@ -1513,13 +1563,14 @@ function faturaRowsHTML(e){
 }
 function renderFaturaAtual(){
   const today=todayStr(),{ini,fim}=cicloDe(today);
-  const proj=estimarFatura(ini,fim,true),ate=estimarFatura(ini,fim,false);
+  const proj=estimarFatura(ini,fim,true,true),ate=estimarFatura(ini,fim,false,true);
   st('fat-total',eur(proj.total));
   st('fat-period','Ciclo '+fmtD(ini)+' → '+fmtD(fim)+' · projeção com '+proj.n+' de '+proj.N+' dias · até hoje: '+eur(ate.total));
   let h=faturaRowsHTML(proj);
   const dsc=desconto(today);
   if(dsc>0) h+=`<div class="fat-row"><span class="fat-row-lbl pos">✅ Desconto ${nf(dsc*100,0)}% na energia até ${fmtDY(T().discEnd)}</span><span></span></div>`;
-  h+=`<div class="fat-row"><span class="fat-row-lbl">Repartição FV/Vazio: ${proj.exact} de ${proj.n} dias medidos (resto estimado)</span><span></span></div>`;
+  h+=`<div class="fat-row"><span class="fat-row-lbl">Repartição FV/Vazio: ${proj.exact} de ${proj.n} dias medidos${invoiceShare(today)!==null?' · resto pela proporção real das faturas':' (resto estimado)'}</span><span></span></div>`;
+  if(proj.fr!==1) h+=`<div class="fat-row"><span class="fat-row-lbl">kWh da rede corrigidos pelo contador EDP (×${nf(proj.fr,2)}, das faturas anteriores)</span><span></span></div>`;
   sethtml('fat-rows',h);
 }
 
@@ -1532,21 +1583,25 @@ function onFaturaSubmit(ev){
   ev.preventDefault();
   const mes=$('fat-mes').value.trim();
   const val=$('fat-valor').value===''?null:parseFloat($('fat-valor').value);
-  const kwh=$('fat-kwh').value===''?null:parseFloat($('fat-kwh').value);
+  const kv=$('fat-kwhv').value===''?null:parseFloat($('fat-kwhv').value);
+  const kf=$('fat-kwhfv').value===''?null:parseFloat($('fat-kwhfv').value);
   const eco=$('fat-economia').value===''?null:parseFloat($('fat-economia').value);
-  ['fat-mes','fat-valor','fat-kwh','fat-economia'].forEach(id=>$(id).classList.remove('invalid'));
+  ['fat-mes','fat-valor','fat-kwhv','fat-kwhfv','fat-economia'].forEach(id=>$(id).classList.remove('invalid'));
   const err=[];
   if(!/^\d{4}-\d{2}$/.test(mes)){err.push('Indica o mês');$('fat-mes').classList.add('invalid');}
-  [['fat-valor',val],['fat-kwh',kwh],['fat-economia',eco]].forEach(([id,v])=>{if(v!==null&&(!isNum(v)||v<0||v>100000)){err.push('Valor inválido');$(id).classList.add('invalid');}});
-  if(val===null&&kwh===null&&eco===null) err.push('Preenche pelo menos um valor');
+  [['fat-valor',val],['fat-kwhv',kv],['fat-kwhfv',kf],['fat-economia',eco]].forEach(([id,v])=>{if(v!==null&&(!isNum(v)||v<0||v>100000)){err.push('Valor inválido');$(id).classList.add('invalid');}});
+  if((kv===null)!==(kf===null)){err.push('Indica os kWh de Vazio e de Fora Vazio');$(kv===null?'fat-kwhv':'fat-kwhfv').classList.add('invalid');}
+  if(val===null&&kv===null&&eco===null) err.push('Preenche pelo menos um valor');
   if(err.length){st('fat-err',[...new Set(err)].join(' · '));return;}
   st('fat-err','');
-  if(!lsSet('fatura_'+mes,JSON.stringify({mes,valor:val,kwh,economia:eco,ts:Date.now()}))){st('fat-err','Não foi possível guardar (armazenamento cheio?)');return;}
+  const kwh=kv!==null?kv+kf:null;
+  if(!lsSet('fatura_'+mes,JSON.stringify({mes,valor:val,kwh,kwhV:kv,kwhFV:kf,economia:eco,ts:Date.now()}))){st('fat-err','Não foi possível guardar (armazenamento cheio?)');return;}
+  FATC=null;
   $('fat-form').reset();
   toast('Fatura '+fmtMes(mes)+' guardada');
   renderFaturas();
 }
-function delFatura(mes){if(!confirm('Apagar a fatura de '+fmtMes(mes)+'?'))return;lsDel('fatura_'+mes);renderFaturas();}
+function delFatura(mes){if(!confirm('Apagar a fatura de '+fmtMes(mes)+'?'))return;lsDel('fatura_'+mes);FATC=null;renderFaturas();}
 function diffTag(app,ref){
   if(!isNum(app)||!isNum(ref)||ref===0) return '';
   const pct=(app-ref)/ref*100,cls=Math.abs(pct)<=10?'pos':Math.abs(pct)<=25?'warn-c':'neg';
@@ -1566,10 +1621,13 @@ function renderFaturas(){
     let pou=0,nm=0;
     for(const ds of dateRange(mIni,mFim)){const d=S.days[ds];if(hasDay(d)){pou+=poupancaDia(ds,d).eur;nm++;}}
     const cov=e.n+'/'+e.N+' dias';
+    const usada=ciclosFaturados().find(c=>c.mes===f.mes);
     h+=`<div class="inv-card"><div class="inv-head"><div><div class="inv-title">${esc(fmtMes(f.mes))}</div><div class="small">Ciclo ${fmtD(ini)} → ${fmtD(fim)} · app: ${cov}</div></div><button class="btn-del" onclick="delFatura('${esc(f.mes)}')" aria-label="Apagar">🗑</button></div>`;
     h+='<div class="detail-rows">';
     if(isNum(f.valor)) h+=`<div class="drow"><span>Fatura EDP / estimativa app</span><span>${eur(f.valor)} / ${e.n?eur(e.total):'—'}${e.n?diffTag(e.total,f.valor):''}</span></div>`;
-    if(isNum(f.kwh)) h+=`<div class="drow"><span>kWh rede EDP / medidos</span><span>${nf(f.kwh,1)} / ${e.n?nf(imp,1):'—'}${e.n===e.N?diffTag(imp,f.kwh):''}</span></div>`;
+    if(isNum(f.kwh)) h+=`<div class="drow"><span>kWh rede EDP / medidos app</span><span>${nf(f.kwh,0)} / ${e.n?nf(imp,1):'—'}${e.n===e.N?diffTag(imp,f.kwh):''}</span></div>`;
+    if(isNum(f.kwhV)&&isNum(f.kwhFV)) h+=`<div class="drow"><span>Vazio / Fora Vazio (EDP)</span><span>${nf(f.kwhV,0)} / ${nf(f.kwhFV,0)} kWh · ${nf(f.kwh>0?f.kwhFV/f.kwh*100:0,0)}% FV</span></div>`;
+    if(usada) h+=`<div class="drow"><span>Correção aplicada ao retorno</span><span class="${usada.eur>=0?'pos':'neg'}">${usada.eur>=0?'+':''}${eur(usada.eur)}</span></div>`;
     if(isNum(f.economia)) h+=`<div class="drow"><span>Economia Deye / poupança app (mês)</span><span>${eur(f.economia)} / ${nm?eur(pou):'—'}${nm?diffTag(pou,f.economia):''}</span></div>`;
     if(e.n<e.N) h+=`<div class="drow"><span>Aviso</span><span class="warn-c">faltam dados de ${e.N-e.n} dias no ciclo</span></div>`;
     h+='</div></div>';
@@ -1850,10 +1908,22 @@ $('fat-form').addEventListener('submit',onFaturaSubmit);
 $('lock-form').addEventListener('submit',e=>{e.preventDefault();const v=$('lock-pwd').value;if(v)tryUnlock(v);});
 window.addEventListener('error',e=>console.error('[APP]',e.message));
 
-// Faturas já conhecidas (só se ainda não existirem)
+// Faturas EDP reais (leituras reais do contador). Não substituem faturas introduzidas à mão.
+const FATURAS_EDP=[
+  {mes:'2026-05',valor:87.09,kwhV:228,kwhFV:21},   // 23/04 → 22/05
+  {mes:'2026-06',valor:78.57,kwhV:188,kwhFV:18},   // 23/05 → 22/06
+  {mes:'2026-07',valor:62.67,kwhV:73,kwhFV:17},    // 23/06 → 22/07
+  {mes:'2026-08',valor:64.97,kwhV:79,kwhFV:17},    // 23/07 → 22/08
+  {mes:'2026-09',valor:69.93,kwhV:89,kwhFV:35},    // 23/08 → 22/09
+];
 (function(){
-  if(!lsGet('fatura_2026-04')) lsSet('fatura_2026-04',JSON.stringify({mes:'2026-04',economia:62.42,valor:null,kwh:94.5,ts:Date.now()}));
-  if(!lsGet('fatura_2026-05')) lsSet('fatura_2026-05',JSON.stringify({mes:'2026-05',economia:129.72,valor:87.09,kwh:241.95,ts:Date.now()}));
+  if(!lsGet('fatura_2026-04')) lsSet('fatura_2026-04',JSON.stringify({mes:'2026-04',economia:62.42,valor:null,kwh:null,ts:Date.now()}));
+  for(const f of FATURAS_EDP){
+    const cur=lsJSON('fatura_'+f.mes,null);
+    if(cur&&cur.fonte!=='pdf'&&isNum(cur.kwhV)) continue; // introduzida à mão com repartição: manter
+    lsSet('fatura_'+f.mes,JSON.stringify({...(cur||{}),...f,kwh:f.kwhV+f.kwhFV,economia:cur&&isNum(cur.economia)?cur.economia:null,fonte:'pdf',ts:Date.now()}));
+  }
+  FATC=null;
 })();
 
 // Chart.js
