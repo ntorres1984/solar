@@ -903,6 +903,45 @@ const SRC_RANK={local:0,dy:1,sm:2};
 
 function saveDays(){return lsSet('days_v2',JSON.stringify(S.days));}
 function saveSlots(){return lsSet('slots_v1',JSON.stringify(SLOTS));}
+
+// ─── Sinais SOLARMAN (bateria/rede) calibrados pelo balanço de potência ───
+// Em cada instante: solar + rede + bateria ≈ casa (app: rede + = compra, bateria + = descarga).
+// O SOLARMAN não documenta o sentido de B_P1/PG_Pt1 para a Deye: a app testa as 4 combinações
+// e fica com a que fecha o balanço. g/b multiplicam os valores devolvidos pelo Worker.
+// Confirmado a 28/09 com a app SOLARMAN (bateria −1,63 kW a carregar, rede 8 W a comprar): o Worker devolve
+// ambos com o sinal trocado → predefinição ×−1. A calibração automática corrige se algum dia mudar.
+let SIGNS=lsJSON('sm_signs_v1',null);
+if(!SIGNS||!isNum(SIGNS.g)||!isNum(SIGNS.b)){
+  SIGNS={g:-1,b:-1,src:'predefinição',at:Date.now()};
+  lsSet('sm_signs_v1',JSON.stringify(SIGNS));
+  SLOTS={};saveSlots();   // curvas guardadas com o sinal da rede errado → voltam a ser calculadas
+}
+const SIGN_KEYS=[[1,1],[1,-1],[-1,1],[-1,-1]];
+function calibrarSinais(rows,origem){
+  const tot={};SIGN_KEYS.forEach(k=>{tot[k]=0;});
+  let n=0,nb=0,ng=0;
+  for(const r of rows){
+    if(!isNum(r.pv)||!isNum(r.ld)||!isNum(r.grid)||!isNum(r.bat)) continue;
+    n++;if(Math.abs(r.bat)>300)nb++;if(Math.abs(r.grid)>300)ng++;
+    for(const k of SIGN_KEYS) tot[k]+=Math.abs(r.pv+k[0]*r.grid+k[1]*r.bat-r.ld);
+  }
+  if(!n) return false;
+  let best=SIGN_KEYS[0];for(const k of SIGN_KEYS) if(tot[k]<tot[best]) best=k;
+  const need=Math.min(3,n);
+  const clara=alt=>tot[alt]>1.5*tot[best]+300*Math.min(n,3);   // a alternativa tem de ser claramente pior
+  const b=nb>=need&&clara([best[0],-best[1]])?best[1]:SIGNS.b;
+  const g=ng>=need&&clara([-best[0],best[1]])?best[0]:SIGNS.g;
+  if(b===SIGNS.b&&g===SIGNS.g){ if(origem==='curva'&&SIGNS.src!=='curva'&&(nb>=need||ng>=need)){SIGNS.src='curva';lsSet('sm_signs_v1',JSON.stringify(SIGNS));} return false; }
+  const gridMudou=g!==SIGNS.g;
+  SIGNS={g,b,src:origem,at:Date.now()};
+  lsSet('sm_signs_v1',JSON.stringify(SIGNS));
+  // A repartição Fora Vazio/Vazio das curvas depende do sinal da rede → recalcular
+  if(gridMudou){SLOTS={};saveSlots();AVG=null;}
+  console.info('[SINAIS] rede ×'+g+' · bateria ×'+b+' ('+origem+')');
+  return true;
+}
+const sgn=(v,k)=>isNum(v)?v*SIGNS[k]||0:v;
+const fixRows=rows=>rows.map(r=>[r[0],r[1],r[2],sgn(r[3],'g'),sgn(r[4],'b'),r[5]]);
 function putDay(ds,d,src){
   const cur=S.days[ds];
   if(cur&&SRC_RANK[cur.src]>SRC_RANK[src]&&ds!==todayStr()) return false;
@@ -1187,8 +1226,11 @@ async function loadLive(){
   if(smAvailable()){
     try{
       const j=await smGet('/sm/live');
-      S.sm.keys=j.keys||null;S.sm.missing=j.missing||[];S.sm.balance=isNum(j.balanceW)?j.balanceW:null;
-      S.live={src:'SOLARMAN',ts:j.ts||Date.now(),pvW:j.pvW,ldW:j.ldW,gridW:j.gridW,batW:j.batW,soc:j.soc,tempC:j.tempC};
+      S.sm.keys=j.keys||null;S.sm.missing=j.missing||[];
+      // Sem curva calibrada ainda: usa a própria leitura (basta um instante com a bateria ou a rede ativas)
+      if(SIGNS.src!=='curva'&&calibrarSinais([{pv:j.pvW,ld:j.ldW,grid:j.gridW,bat:j.batW}],'tempo real')&&S.curve&&S.curve.src==='sm') S.curve.loadedAt=0;
+      S.live={src:'SOLARMAN',ts:j.ts||Date.now(),pvW:j.pvW,ldW:j.ldW,gridW:sgn(j.gridW,'g'),batW:sgn(j.batW,'b'),soc:j.soc,tempC:j.tempC};
+      const L0=S.live;S.sm.balance=[L0.pvW,L0.ldW,L0.gridW,L0.batW].every(isNum)?L0.pvW+L0.gridW+L0.batW-L0.ldW:null;
       S.sm.liveErr='';
       const td=j.today||{};
       if(isNum(td.ld)&&td.day===todayStr()) setToday(td,'sm');
@@ -1222,9 +1264,11 @@ async function loadCurve(){
     try{
       const j=await smGet('/sm/day?date='+today,20000);
       if(Array.isArray(j.rows)&&j.rows.length){
+        if(calibrarSinais(j.rows.map(r=>({pv:r[1],ld:r[2],grid:r[3],bat:r[4]})),'curva')&&S.live&&S.live.src==='SOLARMAN') loadLive();
+        const rows=fixRows(j.rows);
         S.curve={src:'sm',date:today,loadedAt:Date.now(),
-          pts:j.rows.map(r=>({x:hourOf(r[0]),pv:r[1],ld:r[2],grid:r[3],bat:r[4],soc:r[5]}))};
-        S.todayBuckets=bucketsFromRows(j.rows);
+          pts:rows.map(r=>({x:hourOf(r[0]),pv:r[1],ld:r[2],grid:r[3],bat:r[4],soc:r[5]}))};
+        S.todayBuckets=bucketsFromRows(rows);
         renderCharts();renderDaySummary();
         if(S.page==='fin') renderFinTab();
         return;
@@ -1293,7 +1337,7 @@ async function startBackfill(){
     if(!smAvailable()) break;
     try{
       const j=await smGet('/sm/day?date='+ds,20000);
-      const b=Array.isArray(j.rows)&&j.rows.length>=100?bucketsFromRows(j.rows):null;
+      const b=Array.isArray(j.rows)&&j.rows.length>=100?bucketsFromRows(fixRows(j.rows)):null;
       SLOTS[ds]=b||{na:1};
       saveSlots();AVG=null;fails=0;
     }catch(e){
@@ -1549,6 +1593,10 @@ function renderDiag(){
   if(isNum(S.sm.balance)&&L&&L.src==='SOLARMAN'){
     const ref=Math.max(500,(L.pvW||0)*0.15,(L.ldW||0)*0.15),okB=Math.abs(S.sm.balance)<=ref;
     rows.push(['Balanço de potência',Math.round(S.sm.balance)+' W'+(okB?'':' (sinais trocados?)'),okB?'ok':'warn']);
+  }
+  if(S.sm.ok){
+    const srcTxt=SIGNS.src==='curva'?'confirmado pela curva de hoje':SIGNS.src==='tempo real'?'confirmado em tempo real':'predefinição';
+    rows.push(['Sentido bateria / rede (SOLARMAN)','Worker × '+SIGNS.b+' / × '+SIGNS.g+' · '+srcTxt,SIGNS.src==='curva'?'ok':'off']);
   }
   if(S.sm.missing&&S.sm.missing.length) rows.push(['Chaves em falta',S.sm.missing.join(', '),'warn']);
   rows.push(['Dias completos desde a instalação',String(days.length)]);
