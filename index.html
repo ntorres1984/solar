@@ -599,7 +599,8 @@ select.settings-input{text-align:left;width:140px}
         <div class="card-h"><div><div class="card-t"><i data-ic="battery"></i>Bateria cheia e solar desperdiçado</div><div class="card-s">Sem venda à rede, quando a bateria enche o inversor limita a produção</div></div></div>
         <div class="small" id="waste-today" style="font-size:13px;color:var(--text-2);margin-bottom:12px">—</div>
         <div id="waste-kpis"></div>
-        <div class="chart-sub">Solar desperdiçado por dia (kWh) · últimos 30 dias</div>
+        <div id="waste-aus"></div>
+        <div class="chart-sub" id="waste-sub">Solar desperdiçado por dia (kWh) · últimos 30 dias em casa</div>
         <div class="chart-wrap sm" style="height:140px"><canvas id="ch-waste"></canvas></div>
         <div id="waste-sim"></div>
         <div class="chart-sub" style="margin-top:16px">Por mês (€ que cada cenário teria poupado)</div>
@@ -698,6 +699,20 @@ select.settings-input{text-align:left;width:140px}
       </div>
 
       <div class="settings-section">
+        <div class="settings-title">Ausências (férias)</div>
+        <div class="settings-card">
+          <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:8px">
+            <div><div class="settings-row-lbl">Dias fora de casa</div><div class="settings-row-sub">Não entram na análise "Bateria cheia e solar desperdiçado"</div></div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <input class="settings-input" id="aus-de" type="date" style="width:150px" aria-label="Início">
+              <span class="muted">→</span>
+              <input class="settings-input" id="aus-ate" type="date" style="width:150px" aria-label="Fim">
+            </div>
+          </div>
+          <div id="aus-list"></div>
+          <div id="aus-sug"></div>
+        </div>
+        <button class="btn secondary" onclick="saveAusenciaForm()" style="margin-bottom:22px">Adicionar ausência</button>
         <div class="settings-title">Dados e sessão</div>
         <div class="settings-card" style="margin-bottom:4px">
           <div class="settings-row"><div><div class="settings-row-lbl">Pedir password ao abrir</div><div class="settings-row-sub">Desligado: fica guardada neste dispositivo até carregares em Sair</div></div><label class="switch"><input type="checkbox" id="s-lock-always" onchange="setLockAlways(this.checked)"><span></span></label></div>
@@ -2301,29 +2316,83 @@ function cenarios(){
   L.push({id:'ext',t:'Mais 1 bateria de '+WASTE.extraKwh+' kWh',s:'+'+nf(WASTE.extraKwh*(1-min/100),1)+' kWh úteis (mínimo '+min+'%)',C:WASTE.extraKwh*(1-min/100),compra:true});
   return L;
 }
+// ─── Ausências (férias): dias fora de casa não entram na análise da bateria ───
+function ausencias(){const L=lsJSON('ausencias_v1',[]);return Array.isArray(L)?L.filter(a=>a&&isIso(a.de)&&isIso(a.ate)&&a.de<=a.ate).sort((a,b)=>a.de<b.de?-1:1):[];}
+const emAusencia=(ds,L=ausencias())=>L.some(a=>ds>=a.de&&ds<=a.ate);
+function addAusencia(de,ate){
+  if(!isIso(de)||!isIso(ate)||de>ate){toast('Datas inválidas',true);return false;}
+  const L=ausencias().filter(a=>!(a.de===de&&a.ate===ate));L.push({de,ate});
+  if(!lsSet('ausencias_v1',JSON.stringify(L))){toast('Erro ao guardar',true);return false;}
+  toast('Ausência '+fmtD(de)+'–'+fmtD(ate)+' excluída da análise');
+  renderAusencias();if(S.page==='tech')renderDesperdicio();
+  return true;
+}
+function delAusencia(de,ate){
+  if(!confirm('Voltar a incluir '+fmtDY(de)+' a '+fmtDY(ate)+' na análise?')) return;
+  lsSet('ausencias_v1',JSON.stringify(ausencias().filter(a=>!(a.de===de&&a.ate===ate))));
+  renderAusencias();if(S.page==='tech')renderDesperdicio();
+}
+// Sugestões: 2 ou mais dias seguidos com consumo abaixo de 45% da mediana (casa vazia)
+function sugerirAusencias(){
+  const t=T(),dias=dateRange(t.installDate,addDays(todayStr(),-1)).filter(d=>hasDay(S.days[d]));
+  if(dias.length<14) return [];
+  const v=dias.map(d=>S.days[d].ld).sort((a,b)=>a-b),med=v[Math.floor(v.length/2)],lim=0.45*med;
+  const out=[];let cur=null;
+  for(const d of dias){
+    if(S.days[d].ld>=lim){if(cur){out.push(cur);cur=null;}continue;}
+    if(cur&&addDays(cur.ate,1)===d){cur.ate=d;cur.kwh+=S.days[d].ld;cur.n++;}
+    else{if(cur)out.push(cur);cur={de:d,ate:d,kwh:S.days[d].ld,n:1};}
+  }
+  if(cur) out.push(cur);
+  const L=ausencias();
+  return out.filter(a=>a.n>=2&&!L.some(x=>x.de<=a.de&&x.ate>=a.ate)).map(a=>({...a,media:a.kwh/a.n,med}));
+}
+function sugHTML(sug){
+  return sug.map(a=>`<div class="tar-item" style="align-items:center"><span>Consumo muito baixo de <b>${fmtD(a.de)}</b> a <b>${fmtD(a.ate)}</b> (${a.n} dias, ${nf(a.media,1)} kWh/dia; normal ${nf(a.med,0)}) — férias?</span><button class="btn secondary" style="width:auto;margin:0;padding:7px 12px;font-size:13px" onclick="addAusencia('${a.de}','${a.ate}')">Excluir</button></div>`).join('');
+}
+function renderAusencias(){
+  if(!$('aus-list')) return;
+  const L=ausencias();
+  sethtml('aus-list',L.length?L.map(a=>`<div class="tar-item"><span>${fmtDY(a.de)} → ${fmtDY(a.ate)} · ${daysBetween(a.de,a.ate)+1} dias</span><button class="btn-del" onclick="delAusencia('${a.de}','${a.ate}')" aria-label="Voltar a incluir">${ic('trash','ic sm')}</button></div>`).join(''):'<div class="tar-item"><span class="muted">Nenhuma ausência marcada</span></div>');
+  sethtml('aus-sug',sugHTML(sugerirAusencias()));
+}
+function saveAusenciaForm(){
+  const de=$('aus-de').value,ate=$('aus-ate').value;
+  const ok=isIso(de)&&isIso(ate)&&de<=ate;
+  $('aus-de').classList.toggle('invalid',!ok);$('aus-ate').classList.toggle('invalid',!ok);
+  if(!ok){toast('Indica as datas de início e fim',true);return;}
+  if(addAusencia(de,ate)){$('aus-de').value='';$('aus-ate').value='';}
+}
 function calcDesperdicio(){
-  const t=T(),today=todayStr(),C=cenarios();
+  const t=T(),today=todayStr(),C=cenarios(),AUS=ausencias();
   const dias=dateRange(t.installDate,addDays(today,-1)).filter(ds=>soldDe(ds));
-  const rows=[];
+  const rows=[];let excl=0;
   for(const ds of dias){
+    if(emAusencia(ds,AUS)){excl++;continue;}
     const a=analiseDia(ds);if(!a) continue;
     const noite=noiteDe(ds);
     const v={};for(const c of C) v[c.id]=noite?valorExtra(a,noite,c.C):null;
     rows.push({...a,noiteKwh:noite?noite.reduce((s,x)=>s+x.kwh,0):null,v});
   }
-  return {rows,C,hoje:analiseDia(today)};
+  return {rows,C,excl,hoje:analiseDia(today)};
 }
 function renderDesperdicio(){
   if(!$('waste-card')) return;
   const {rows,C,hoje}=calcDesperdicio();
+  const AUS=ausencias();
   const hm2=m=>pad(Math.floor(m/60))+':'+pad(m%60);
   // Hoje
   const L=S.live,socNow=L&&isNum(L.soc)?L.soc:null;
   sethtml('waste-today',!hoje?'<span class="muted">Sem curva do dia do SOLARMAN.</span>'
     :hoje.full!==null?`Hoje a bateria encheu às <b>${hm2(hoje.full)}</b> · solar desperdiçado até agora ≈ <b>${nf(hoje.lim,1)} kWh</b>`
     :`Hoje a bateria ainda não encheu${socNow!==null?' ('+nf(socNow,0)+'%)':''} — nada desperdiçado até agora`);
-  // Últimos 30 dias
-  const u=rows.filter(r=>r.ds>=addDays(todayStr(),-30));
+  // Últimos 30 dias em casa (sem ausências)
+  const u=rows.slice(-30);
+  const exclJan=u.length?dateRange(u[0].ds,addDays(todayStr(),-1)).filter(ds=>emAusencia(ds,AUS)).length:0;
+  const sug=sugerirAusencias();
+  sethtml('waste-aus',(exclJan?`<div class="small" style="margin:10px 0 0">${exclJan} ${exclJan===1?'dia de ausência excluído':'dias de ausência excluídos'} deste período (Definições › Ausências).</div>`:'')+
+    (sug.length?`<div style="margin-top:8px">${sugHTML(sug)}</div>`:''));
+  st('waste-sub','Solar desperdiçado por dia (kWh) · últimos '+u.length+' dias em casa');
   if(!u.length){
     sethtml('waste-kpis',`<div class="small">${S.sm.ok===false||!smUrl()?'Precisa das curvas de 5 min do SOLARMAN, que não está disponível agora.':'A descarregar as curvas de 5 min dos dias anteriores ('+S.backfill.done+'/'+Math.min(S.backfill.total||0,CFG.BACKFILL_MAX)+')… volta daqui a uns minutos.'}</div>`);
     sethtml('waste-sim','');sethtml('waste-months','');kill('waste');st('waste-note','');return;
@@ -2333,14 +2402,14 @@ function renderDesperdicio(){
   const noitesRede=u.filter(r=>r.noiteKwh!==null&&r.noiteKwh>0.3).length;
   const cov=u.filter(r=>r.horas>0),covMed=cov.length?cov.reduce((s,r)=>s+r.cov*r.horas,0)/cov.reduce((s,r)=>s+r.horas,0):1;
   sethtml('waste-kpis',`<div class="stat-grid">
-    <div class="stat"><div class="stat-l">Dias em que encheu</div><div class="stat-v">${cheios.length} de ${u.length}</div></div>
+    <div class="stat"><div class="stat-l">Dias em que encheu (em casa)</div><div class="stat-v">${cheios.length} de ${u.length}</div></div>
     <div class="stat"><div class="stat-l">Hora média a que enche</div><div class="stat-v">${horaMed!==null?hm2(horaMed):'—'}</div></div>
     <div class="stat"><div class="stat-l">Solar desperdiçado</div><div class="stat-v">≈ ${nf(lim,0)} kWh</div></div>
     <div class="stat"><div class="stat-l">Noites com compra à rede</div><div class="stat-v">${noitesRede} de ${u.length}</div></div>
   </div>`);
   // Cenários (30 dias)
   const soma=(arr,id,k)=>arr.reduce((s,r)=>s+(r.v[id]?r.v[id][k]:0),0);
-  let h='<table class="tbl" style="margin-top:12px"><thead><tr><th>Cenário (últimos 30 dias)</th><th>kWh</th><th>€</th></tr></thead><tbody>';
+  let h='<table class="tbl" style="margin-top:12px"><thead><tr><th>Cenário (últimos '+u.length+' dias em casa)</th><th>kWh</th><th>€</th></tr></thead><tbody>';
   for(const c of C) h+=`<tr><td style="white-space:normal">${esc(c.t)}<div class="muted" style="font-size:11.5px">${esc(c.s)}</div></td><td>${nf(soma(u,c.id,'kwh'),0)}</td><td class="money">${nf(soma(u,c.id,'eur'),2)} €</td></tr>`;
   h+='</tbody></table>';
   // Retorno da bateria extra
@@ -2401,7 +2470,7 @@ function loadSettingsInputs(){
   $('s-upac').checked=t.upac;$('s-sell').value=t.sell;
   $('s-invest').value=t.invest;$('s-install-date').value=t.installDate;
   $('s-bat-cap').value=t.batCap;$('s-bat-min').value=t.batMin;
-  $('s-sm-url').value=smUrl();$('s-theme').value=themeMode();$('s-lock-always').checked=lockAlways();
+  $('s-sm-url').value=smUrl();$('s-theme').value=themeMode();renderAusencias();$('s-lock-always').checked=lockAlways();
   toggleModo();renderTarList();updatePriceHints();renderConnStatus();
 }
 function updatePriceHints(){
