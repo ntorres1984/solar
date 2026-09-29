@@ -595,6 +595,18 @@ select.settings-input{text-align:left;width:140px}
         <div class="chart-wrap"><canvas id="ch-tech"></canvas></div>
       </section>
 
+      <section class="card" id="waste-card">
+        <div class="card-h"><div><div class="card-t"><i data-ic="battery"></i>Bateria cheia e solar desperdiçado</div><div class="card-s">Sem venda à rede, quando a bateria enche o inversor limita a produção</div></div></div>
+        <div class="small" id="waste-today" style="font-size:13px;color:var(--text-2);margin-bottom:12px">—</div>
+        <div id="waste-kpis"></div>
+        <div class="chart-sub">Solar desperdiçado por dia (kWh) · últimos 30 dias</div>
+        <div class="chart-wrap sm" style="height:140px"><canvas id="ch-waste"></canvas></div>
+        <div id="waste-sim"></div>
+        <div class="chart-sub" style="margin-top:16px">Por mês (€ que cada cenário teria poupado)</div>
+        <div class="tbl-wrap" id="waste-months"></div>
+        <div class="small" id="waste-note" style="margin-top:10px"></div>
+      </section>
+
       <section class="card">
         <div class="card-h"><div class="card-t"><i data-ic="activity"></i>Alertas e estado</div></div>
         <div id="alerts"><div class="alert-item"><div class="alert-icon info"><i data-ic="clock" class="ic sm"></i></div><div><div class="alert-t">A aguardar dados</div><div class="alert-s">A ligar aos Workers…</div></div></div></div>
@@ -731,7 +743,7 @@ const CFG={
   cicloDia:23,                     // ciclo de faturação EDP: 23 → 22
   IVA:1.23, IEC:0.001, DGEG:0.07, CAV:2.85*1.06,
   LIVE_MS:60000, CURVE_MS:5*60000, HIST_MS:30*60000,
-  BACKFILL_MAX:60, BACKFILL_GAP_MS:700,
+  BACKFILL_MAX:160, BACKFILL_GAP_MS:700,
   SM_RETRY_MS:10*60000,
 };
 
@@ -912,7 +924,7 @@ function sunTimes(date,lat,lon){
 // ESTADO + ARMAZENAMENTO LOCAL
 // ═══════════════════════════════════════════════════════
 const S={
-  live:null, today:null, curve:null, todayBuckets:null, prevCurve:null,
+  live:null, today:null, curve:null, todayBuckets:null, prevCurve:null, soldToday:null,
   days:lsJSON('days_v2',{}),          // data → {pv,ld,gr,ex,bc,bd,src}
   sm:{ok:null,err:'',liveErr:'',retryAt:0,keys:null,missing:null,balance:null,lastOk:0},
   dy:{ok:null,err:'',lastOk:0},
@@ -1316,6 +1328,8 @@ async function loadCurve(){
         S.curve={src:'sm',date:today,loadedAt:Date.now(),
           pts:rows.map(r=>({x:hourOf(r[0]),pv:r[1],ld:r[2],grid:r[3],bat:r[4],soc:r[5]}))};
         S.todayBuckets=bucketsFromRows(rows);
+        S.soldToday=soldFromRows(rows,12);
+        if(S.page==='tech') renderDesperdicio();
         renderCharts();renderDaySummary();renderPeriodos();
         if(S.page==='fin') renderFinTab();
         loadPrevCurve();
@@ -1389,7 +1403,7 @@ async function loadHistory(force=false){
 async function startBackfill(){
   if(S.backfill.running||!smAvailable()) return;
   const t=T(),today=todayStr();
-  const todo=dateRange(t.installDate,addDays(today,-1)).filter(ds=>SLOTS[ds]===undefined&&hasDay(S.days[ds])).reverse();
+  const todo=dateRange(t.installDate,addDays(today,-1)).filter(ds=>(SLOTS[ds]===undefined||SOLD[ds]===undefined)&&hasDay(S.days[ds])).reverse();
   if(!todo.length) return;
   S.backfill={running:true,done:0,total:todo.length,fail:0};
   let fails=0;
@@ -1397,9 +1411,11 @@ async function startBackfill(){
     if(!smAvailable()) break;
     try{
       const j=await smGet('/sm/day?date='+ds,20000);
-      const b=Array.isArray(j.rows)&&j.rows.length>=100?bucketsFromRows(fixRows(j.rows)):null;
+      const ok=Array.isArray(j.rows)&&j.rows.length>=100,rows=ok?fixRows(j.rows):null;
+      const b=ok?bucketsFromRows(rows):null;
       SLOTS[ds]=b||{na:1};
-      saveSlots();AVG=null;fails=0;
+      SOLD[ds]=(ok&&soldFromRows(rows))||{na:1};ENVC={};
+      saveSlots();saveSold();AVG=null;fails=0;
       if(b&&S.days[ds]&&!isNum(S.days[ds].gr)) redeDasCurvas();
     }catch(e){
       if(e.status===401) break;
@@ -1407,11 +1423,12 @@ async function startBackfill(){
       if(fails>=3) break;
     }
     S.backfill.done++;
-    if(S.backfill.done%10===0&&S.page==='fin') renderFinTab();
+    if(S.backfill.done%10===0){if(S.page==='fin')renderFinTab();if(S.page==='tech')renderDesperdicio();}
     await sleep(CFG.BACKFILL_GAP_MS);
   }
   S.backfill.running=false;
   if(S.page==='fin') renderFinTab();
+  if(S.page==='tech') renderDesperdicio();
 }
 
 async function resyncHistory(){
@@ -2188,6 +2205,7 @@ function applyThemeMeta(){
 function redrawCharts(){
   if(!window.Chart) return;
   renderCharts();
+  if(S.page==='tech') renderDesperdicio();
   if(S.page==='fin') renderFinTab();
   if(CH.big&&S.bigKind) make('big','ch-big',S.bigKind==='tech'?techCfg(true):todayCfg(true));
 }
@@ -2197,6 +2215,170 @@ function setTheme(v){
   applyThemeMeta();redrawCharts();
 }
 try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{if(themeMode()==='auto')redrawCharts();});}catch(e){}
+
+
+// ═══════════════════════════════════════════════════════
+// BATERIA CHEIA E SOLAR DESPERDIÇADO
+// ═══════════════════════════════════════════════════════
+// Sem venda à rede, quando a bateria enche o inversor limita a produção ao consumo da casa.
+// Por dia guarda-se um resumo da curva de 5 min em 96 blocos de 15 min (SOLD):
+//   pv  = produção média (W) · imp = compra à rede (Wh) · thr = '1' se a bateria estava cheia e parada
+//   full = minuto do dia em que a bateria encheu (ou null)
+// Potencial de cada bloco = 2.º maior valor de produção desse bloco, em dias (±15) sem bateria cheia.
+// Solar desperdiçado ≈ Σ (potencial − produção) nos blocos com bateria cheia e sol + exportação não paga.
+const WASTE={eta:0.9, extraKwh:16};   // perdas de carga+descarga ~10% · bateria extra = 1 Felicity FLB48314TG1 (16 kWh)
+function soldFromRows(rows,minN=100){
+  const pv=new Array(96).fill(0),imp=new Array(96).fill(0),cnt=new Array(96).fill(0),thr=new Array(96).fill(0);
+  let full=null,n=0;
+  for(let i=0;i<rows.length;i++){
+    const r=rows[i],d=new Date(r[0]*1000),m=d.getHours()*60+d.getMinutes(),s=Math.floor(m/15);
+    if(s<0||s>95) continue;
+    const dt=rows[i+1]?Math.min(900,rows[i+1][0]-r[0]):300;
+    if(dt<=0) continue;
+    const p=isNum(r[1])?Math.max(0,r[1]):0,g=isNum(r[3])?r[3]:0,b=isNum(r[4])?r[4]:0,soc=r[5];
+    pv[s]+=p;cnt[s]++;n++;
+    if(g>0) imp[s]+=g*dt/3600;
+    // bateria cheia e parada: nem carrega nem descarrega de forma significativa
+    if(isNum(soc)&&soc>=97&&b>-300&&b<300){thr[s]++;if(full===null&&p>200)full=m;}
+  }
+  if(n<minN) return null;
+  return {pv:pv.map((v,i)=>cnt[i]?Math.round(v/cnt[i]):0),imp:imp.map(v=>Math.round(v)),
+    thr:thr.map((v,i)=>cnt[i]&&v*2>=cnt[i]?1:0).join(''),full};
+}
+let SOLD=lsJSON('sold_v1',{});
+function saveSold(){
+  if(lsSet('sold_v1',JSON.stringify(SOLD))) return true;
+  // Sem espaço: descarta os dias mais antigos e tenta de novo
+  Object.keys(SOLD).sort().slice(0,30).forEach(k=>delete SOLD[k]);
+  return lsSet('sold_v1',JSON.stringify(SOLD));
+}
+const soldDe=ds=>ds===todayStr()?S.soldToday:(SOLD[ds]&&!SOLD[ds].na?SOLD[ds]:null);
+const slotSol=ds=>{const s=sunTimes(pdate(ds),CFG.lat,CFG.lon);return s?{rise:(s.rise.getHours()*60+s.rise.getMinutes())/15,set:(s.set.getHours()*60+s.set.getMinutes())/15}:null;};
+let ENVC={};
+function envelope(ds){
+  if(ENVC[ds]) return ENVC[ds];
+  const lo=addDays(ds,-15),hi=addDays(ds,15),cols=Array.from({length:96},()=>[]);
+  for(const [k,r] of Object.entries(SOLD)){
+    if(k<lo||k>hi||!r||r.na) continue;
+    for(let s=0;s<96;s++) if(r.thr[s]!=='1') cols[s].push(r.pv[s]);
+  }
+  const env=cols.map(c=>{if(c.length<3)return null;c.sort((a,b)=>b-a);return c[1];});
+  return (ENVC[ds]=env);
+}
+function analiseDia(ds){
+  const r=soldDe(ds),sol=slotSol(ds);if(!r||!sol) return null;
+  const env=envelope(ds);
+  let lim=0,thrN=0,cov=0;
+  for(let s=Math.ceil(sol.rise);s<Math.floor(sol.set);s++){
+    if(r.thr[s]!=='1') continue;
+    thrN++;
+    if(env[s]!==null){lim+=Math.max(0,env[s]-r.pv[s])*0.25/1000;cov++;}
+  }
+  const d=S.days[ds],exp=!T().upac&&d&&isNum(d.ex)?d.ex:0;
+  return {ds,full:r.full,lim:lim+exp,exp,horas:thrN/4,cov:thrN?cov/thrN:1};
+}
+// Compra à rede na noite seguinte (pôr do sol → nascer), por ordem, com o preço de cada bloco
+function noiteDe(ds){
+  const ds2=addDays(ds,1),r=soldDe(ds),r2=soldDe(ds2),sa=slotSol(ds),sb=slotSol(ds2);
+  if(!r||!r2||!sa||!sb) return null;
+  const preco=(dd,s)=>{const d=pdate(dd);return precoKwh(dd,isFVmin(d.getDay(),s*15+7,isVerao(d)));};
+  const out=[];
+  for(let s=Math.ceil(sa.set);s<96;s++) if(r.imp[s]>0) out.push({kwh:r.imp[s]/1000,p:preco(ds,s)});
+  for(let s=0;s<Math.floor(sb.rise);s++) if(r2.imp[s]>0) out.push({kwh:r2.imp[s]/1000,p:preco(ds2,s)});
+  return out;
+}
+// Energia extra guardável num dia (C kWh) → substitui as primeiras compras da noite seguinte
+function valorExtra(a,noite,C){
+  let rest=Math.min(a.lim,C)*WASTE.eta,kwh=0,eur=0;
+  for(const x of noite){if(rest<=0)break;const t=Math.min(rest,x.kwh);kwh+=t;eur+=t*x.p;rest-=t;}
+  return {kwh,eur};
+}
+function cenarios(){
+  const t=T(),cap=t.batCap,min=t.batMin;
+  const L=[];
+  if(min>10) L.push({id:'m10',t:'Mínimo da bateria a 10%',s:'+'+nf(cap*(min-10)/100,1)+' kWh úteis · sem custo',C:cap*(min-10)/100});
+  if(min>5) L.push({id:'m5',t:'Mínimo da bateria a 5%',s:'+'+nf(cap*(min-5)/100,1)+' kWh úteis · limite da ficha (DOD 95%)',C:cap*(min-5)/100});
+  L.push({id:'ext',t:'Mais 1 bateria de '+WASTE.extraKwh+' kWh',s:'+'+nf(WASTE.extraKwh*(1-min/100),1)+' kWh úteis (mínimo '+min+'%)',C:WASTE.extraKwh*(1-min/100),compra:true});
+  return L;
+}
+function calcDesperdicio(){
+  const t=T(),today=todayStr(),C=cenarios();
+  const dias=dateRange(t.installDate,addDays(today,-1)).filter(ds=>soldDe(ds));
+  const rows=[];
+  for(const ds of dias){
+    const a=analiseDia(ds);if(!a) continue;
+    const noite=noiteDe(ds);
+    const v={};for(const c of C) v[c.id]=noite?valorExtra(a,noite,c.C):null;
+    rows.push({...a,noiteKwh:noite?noite.reduce((s,x)=>s+x.kwh,0):null,v});
+  }
+  return {rows,C,hoje:analiseDia(today)};
+}
+function renderDesperdicio(){
+  if(!$('waste-card')) return;
+  const {rows,C,hoje}=calcDesperdicio();
+  const hm2=m=>pad(Math.floor(m/60))+':'+pad(m%60);
+  // Hoje
+  const L=S.live,socNow=L&&isNum(L.soc)?L.soc:null;
+  sethtml('waste-today',!hoje?'<span class="muted">Sem curva do dia do SOLARMAN.</span>'
+    :hoje.full!==null?`Hoje a bateria encheu às <b>${hm2(hoje.full)}</b> · solar desperdiçado até agora ≈ <b>${nf(hoje.lim,1)} kWh</b>`
+    :`Hoje a bateria ainda não encheu${socNow!==null?' ('+nf(socNow,0)+'%)':''} — nada desperdiçado até agora`);
+  // Últimos 30 dias
+  const u=rows.filter(r=>r.ds>=addDays(todayStr(),-30));
+  if(!u.length){
+    sethtml('waste-kpis',`<div class="small">${S.sm.ok===false||!smUrl()?'Precisa das curvas de 5 min do SOLARMAN, que não está disponível agora.':'A descarregar as curvas de 5 min dos dias anteriores ('+S.backfill.done+'/'+Math.min(S.backfill.total||0,CFG.BACKFILL_MAX)+')… volta daqui a uns minutos.'}</div>`);
+    sethtml('waste-sim','');sethtml('waste-months','');kill('waste');st('waste-note','');return;
+  }
+  const cheios=u.filter(r=>r.full!==null),lim=u.reduce((s,r)=>s+r.lim,0);
+  const horaMed=cheios.length?Math.round(cheios.reduce((s,r)=>s+r.full,0)/cheios.length):null;
+  const noitesRede=u.filter(r=>r.noiteKwh!==null&&r.noiteKwh>0.3).length;
+  const cov=u.filter(r=>r.horas>0),covMed=cov.length?cov.reduce((s,r)=>s+r.cov*r.horas,0)/cov.reduce((s,r)=>s+r.horas,0):1;
+  sethtml('waste-kpis',`<div class="stat-grid">
+    <div class="stat"><div class="stat-l">Dias em que encheu</div><div class="stat-v">${cheios.length} de ${u.length}</div></div>
+    <div class="stat"><div class="stat-l">Hora média a que enche</div><div class="stat-v">${horaMed!==null?hm2(horaMed):'—'}</div></div>
+    <div class="stat"><div class="stat-l">Solar desperdiçado</div><div class="stat-v">≈ ${nf(lim,0)} kWh</div></div>
+    <div class="stat"><div class="stat-l">Noites com compra à rede</div><div class="stat-v">${noitesRede} de ${u.length}</div></div>
+  </div>`);
+  // Cenários (30 dias)
+  const soma=(arr,id,k)=>arr.reduce((s,r)=>s+(r.v[id]?r.v[id][k]:0),0);
+  let h='<table class="tbl" style="margin-top:12px"><thead><tr><th>Cenário (últimos 30 dias)</th><th>kWh</th><th>€</th></tr></thead><tbody>';
+  for(const c of C) h+=`<tr><td style="white-space:normal">${esc(c.t)}<div class="muted" style="font-size:11.5px">${esc(c.s)}</div></td><td>${nf(soma(u,c.id,'kwh'),0)}</td><td class="money">${nf(soma(u,c.id,'eur'),2)} €</td></tr>`;
+  h+='</tbody></table>';
+  // Retorno da bateria extra
+  const ext=C.find(c=>c.compra);
+  const meses=new Map();
+  for(const r of rows){const ym=r.ds.slice(0,7);const m=meses.get(ym)||{ym,n:0,cheios:0,lim:0,v:{}};m.n++;if(r.full!==null)m.cheios++;m.lim+=r.lim;for(const c of C){m.v[c.id]=(m.v[c.id]||0)+(r.v[c.id]?r.v[c.id].eur:0);}meses.set(ym,m);}
+  const M=[...meses.values()].filter(m=>m.n>=20);
+  const preco=numSetting('bat_extra_preco',0);
+  let pay='';
+  if(M.length&&preco>0){
+    const vM=M.reduce((s,m)=>s+m.v.ext,0);
+    const anoMax=vM/M.length*12, anoMin=M.length>=12?anoMax:vM;
+    pay=anoMax>0?`Com ${M.length} ${M.length===1?'mês medido':'meses medidos'}: a bateria extra rende ${nf(anoMin,0)}–${nf(anoMax,0)} €/ano → paga-se em <b>${nf(preco/anoMax,1)} a ${nf(preco/Math.max(anoMin,0.01),1)} anos</b>.`
+      :'Nos meses medidos a bateria extra não teria aproveitado energia.';
+  }
+  h+=`<div class="fin-row" style="margin-top:12px"><span class="fin-row-lbl">Preço da bateria extra (€)</span><input class="settings-input" id="bat-extra-preco" type="number" min="0" step="50" inputmode="numeric" placeholder="ex.: 2500" value="${preco>0?preco:''}" style="width:110px"></div>`;
+  h+=`<div class="small" style="margin-top:8px">${pay||'Indica o preço (bateria + instalação) para ver em quantos anos se paga.'}</div>`;
+  sethtml('waste-sim',h);
+  const inp=$('bat-extra-preco');
+  if(inp) inp.onchange=()=>{const v=parseFloat(inp.value);if(inp.value===''||(isNum(v)&&v>=0&&v<100000)){inp.classList.remove('invalid');lsSet('bat_extra_preco',inp.value===''?'0':String(v));renderDesperdicio();}else inp.classList.add('invalid');};
+  // Por mês
+  let t2='<table class="tbl"><thead><tr><th>Mês</th><th>Encheu</th><th>Desperd.</th>'+C.map(c=>`<th>${c.id==='m10'?'Mín. 10%':c.id==='m5'?'Mín. 5%':'+'+WASTE.extraKwh+' kWh'}</th>`).join('')+'</tr></thead><tbody>';
+  for(const m of [...meses.values()].reverse()) t2+=`<tr${m.n<20?' class="partial"':''}><td>${fmtMes(m.ym)}<div class="muted" style="font-size:11px">${m.n} dias</div></td><td>${m.cheios}</td><td>${nf(m.lim,0)} kWh</td>`+C.map(c=>`<td>${nf(m.v[c.id]||0,2)} €</td>`).join('')+'</tr>';
+  t2+='</tbody></table>';
+  sethtml('waste-months',t2);
+  st('waste-note','Estimativa: o potencial de cada 15 min é o 2.º melhor valor dos dias vizinhos (±15 dias) com a bateria a carregar'+
+    (covMed<0.95?'; cobre '+nf(covMed*100,0)+'% das horas com a bateria cheia (o resto não entra — valor por baixo)':'')+
+    '. Em dias de nuvens com a bateria cheia pode sobrestimar. Cada kWh extra substitui as primeiras compras à rede da noite seguinte, ao preço dessa hora, com perdas de 10%. Meses a cinzento têm menos de 20 dias.');
+  drawWasteChart(u);
+}
+function drawWasteChart(u){
+  if(!window.Chart) return;
+  const P=pal(),o=baseOpts(P,{legend:false,cross:false});
+  o.scales.y.min=0;o.scales.y.ticks.callback=v=>nf(v,0);
+  o.scales.x.ticks.maxTicksLimit=8;
+  o.plugins.tooltip.callbacks={label:c=>' Desperdiçado: '+nf(c.parsed.y,1)+' kWh'};
+  make('waste','ch-waste',{type:'bar',data:{labels:u.map(r=>fmtD(r.ds)),datasets:[{label:'Solar desperdiçado',data:u.map(r=>+r.lim.toFixed(2)),backgroundColor:P.solar,maxBarThickness:24,borderRadius:4,borderSkipped:'start'}]},options:o});
+}
 
 // ═══════════════════════════════════════════════════════
 // CONFIG
@@ -2319,7 +2501,7 @@ function navTo(id){
   S.page=id;
   ['live','fin','tech','settings'].forEach(p=>{$('page-'+p).classList.toggle('active',p===id);$('nav-'+p).classList.toggle('active',p===id);});
   if(id==='fin') renderFinTab();
-  if(id==='tech'){renderTech();renderDiag();}
+  if(id==='tech'){renderTech();renderDiag();renderDesperdicio();}
   if(id==='settings') loadSettingsInputs();
   if(id==='live'||id==='tech') renderCharts();
 }
