@@ -1,0 +1,11 @@
+{
+  "domain": "olimpia_sherpa",
+  "name": "Olimpia Splendid SHERPA 171H120F",
+  "version": "0.1.0",
+  "config_flow": true,
+  "dependencies": [
+    "iletcomfort"
+  ],
+  "codeowners": [],
+  "iot_class": "cloud_polling"
+}
