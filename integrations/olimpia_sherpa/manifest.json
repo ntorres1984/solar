@@ -1,7 +1,7 @@
 {
   "domain": "olimpia_sherpa",
   "name": "Olimpia Splendid SHERPA 171H120F",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "config_flow": true,
   "dependencies": [
     "iletcomfort"
