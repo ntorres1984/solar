@@ -9,7 +9,30 @@ from .decoder import decode_status
 async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = hass.data[DOMAIN][entry.entry_id]
     async_add_entities([SherpaRaw(coordinator, entry, key) for key in ("status", "sensors")]
-                       + [SherpaTarget(coordinator, entry)])
+                       + [SherpaTarget(coordinator, entry),
+                          SherpaCapture(coordinator, entry, hass.data[DOMAIN + "_capture"][entry.entry_id][0])])
+
+class SherpaCapture(SensorEntity):
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_name = "Mensagens recebidas"
+    _attr_should_poll = False
+    def __init__(self, coordinator, entry, capture):
+        self.capture = capture
+        self._attr_unique_id = entry.entry_id + "_capture_count"
+        self._attr_device_info = {"identifiers": {(DOMAIN, entry.entry_id)}}
+    async def async_added_to_hass(self):
+        await super().async_added_to_hass()
+        self.capture.listeners.add(self.async_write_ha_state)
+        self.async_on_remove(lambda: self.capture.listeners.discard(self.async_write_ha_state))
+    @property
+    def native_value(self):
+        return self.capture.count
+    @property
+    def extra_state_attributes(self):
+        snapshot = self.capture.snapshot()
+        snapshot.pop("frames")
+        return snapshot
 
 class SherpaBase(CoordinatorEntity, SensorEntity):
     _attr_has_entity_name = True
