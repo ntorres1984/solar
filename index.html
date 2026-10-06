@@ -717,6 +717,14 @@ select.settings-input{text-align:left;width:140px}
         <div class="settings-card" style="margin-bottom:4px">
           <div class="settings-row"><div><div class="settings-row-lbl">Pedir password ao abrir</div><div class="settings-row-sub">Desligado: fica guardada neste dispositivo até carregares em Sair</div></div><label class="switch"><input type="checkbox" id="s-lock-always" onchange="setLockAlways(this.checked)"><span></span></label></div>
         </div>
+        <button class="btn secondary" id="btn-saved-password" type="button" onclick="showSavedPassword()" aria-expanded="false" aria-controls="saved-password-panel">Ver password guardada</button>
+        <div id="saved-password-panel" class="settings-card" style="margin-top:10px;padding:14px" hidden>
+          <label class="settings-row-lbl" for="saved-password">Password guardada neste dispositivo</label>
+          <input class="settings-input wide" id="saved-password" type="text" readonly autocomplete="off" autocapitalize="off" spellcheck="false" style="margin-top:10px;font-size:16px" onclick="this.select()">
+          <div class="settings-row-sub">Usa esta password para entrar na app noutro dispositivo.</div>
+          <button class="btn" type="button" onclick="copySavedPassword()">Copiar password</button>
+          <button class="btn secondary" type="button" onclick="hideSavedPassword()">Ocultar password</button>
+        </div>
         <button class="btn secondary" onclick="exportCSV()"><i data-ic="download"></i>Exportar CSV diário</button>
         <button class="btn secondary" onclick="resyncHistory()"><i data-ic="refresh"></i>Resincronizar histórico</button>
         <button class="btn danger" onclick="doLogout()"><i data-ic="logout"></i>Sair neste dispositivo</button>
@@ -1263,6 +1271,7 @@ function enterWith(pwd){
   if(!APP.started){APP.started=true;initApp();}else{startTimers();refreshAll();}
 }
 function showLock(msg){
+  hideSavedPassword();
   stopTimers();
   $('app').style.display='none';$('lock').style.display='flex';
   st('lock-err',msg||'');$('lock-pwd').value='';
@@ -1281,6 +1290,29 @@ function setLockAlways(on){
 function doLogout(){
   if(!confirm('Sair e esquecer a password neste dispositivo?')) return;
   APP.key='';clearKey();showLock('');
+}
+function showSavedPassword(){
+  if(!APP.key||$('app').style.display==='none') return;
+  $('saved-password').value=APP.key;
+  $('saved-password-panel').hidden=false;
+  $('btn-saved-password').setAttribute('aria-expanded','true');
+}
+function hideSavedPassword(){
+  $('saved-password').value='';
+  $('saved-password-panel').hidden=true;
+  $('btn-saved-password').setAttribute('aria-expanded','false');
+}
+async function copySavedPassword(){
+  if(!APP.key||$('app').style.display==='none'||$('saved-password-panel').hidden) return;
+  try{
+    await navigator.clipboard.writeText(APP.key);
+    hideSavedPassword();
+    toast('Password copiada');
+  }catch(e){
+    if($('saved-password-panel').hidden) return;
+    const field=$('saved-password');field.focus();field.select();field.setSelectionRange(0,field.value.length);
+    toast('Seleciona a password e usa Copiar',true);
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -2567,6 +2599,7 @@ function exportCSV(){
 // NAVEGAÇÃO + ARRANQUE
 // ═══════════════════════════════════════════════════════
 function navTo(id){
+  hideSavedPassword();
   S.page=id;
   ['live','fin','tech','settings'].forEach(p=>{$('page-'+p).classList.toggle('active',p===id);$('nav-'+p).classList.toggle('active',p===id);});
   if(id==='fin') renderFinTab();
@@ -2602,11 +2635,13 @@ function initApp(){
 }
 
 document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState!=='visible') hideSavedPassword();
   if(document.visibilityState!=='visible'||!APP.key||$('app').style.display==='none') return;
   loadLive();
   if(!S.curve||Date.now()-(S.curve.loadedAt||0)>CFG.CURVE_MS) loadCurve();
   if(S.hist.day!==todayStr()) loadHistory();
 });
+window.addEventListener('pagehide',hideSavedPassword);
 ['s-peak-net','s-off-net','s-simples-net'].forEach(id=>$(id).addEventListener('input',updatePriceHints));
 $('fat-form').addEventListener('submit',onFaturaSubmit);
 $('lock-form').addEventListener('submit',e=>{e.preventDefault();const v=$('lock-pwd').value;if(v)tryUnlock(v);});
