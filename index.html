@@ -1095,15 +1095,89 @@ function shareFV(ds,kind){
   if(a&&isNum(a[kind])) return {fv:a[kind],exact:false};
   return {fv:fvFraction(ds),exact:false};
 }
+
+let FLOW_CACHE=null;
+// Reconstrói os fluxos pela curva: rede→casa, rede→bateria, solar→casa,
+// solar→bateria e a proveniência da energia que sai da bateria.
+function fluxosHoje(){
+  const C=S.curve;
+  if(!C||C.date!==todayStr()||!Array.isArray(C.pts)||C.pts.length<12) return null;
+  const t=T(),key=[C.loadedAt,C.pts.length,t.batCap,t.batMin].join('|');
+  if(FLOW_CACHE&&FLOW_CACHE.key===key) return FLOW_CACHE.value;
+  const cap=C.src==='sm'?0.25:1.05,pts=C.pts;
+  const firstSoc=pts.find(p=>!p.live&&isNum(p.soc));
+  const pool={solar:0,grid:0,initial:firstSoc?Math.max(0,(firstSoc.soc-t.batMin)/100*t.batCap):0};
+  const r={ld:0,pv:0,gridTotal:0,gridCasa:0,gridBat:0,gridF:0,gridV:0,custoRede:0,
+    solarCasa:0,solarBat:0,solarF:0,solarV:0,poupSolar:0,exportado:0,solarOutro:0,
+    batCasa:0,batSolarCasa:0,batGridCasa:0,batInicialCasa:0,unknownCasa:0,
+    batCarga:0,batDescarga:0};
+
+  for(let i=0;i<pts.length;i++){
+    const p=pts[i];
+    if(p.live||!isNum(p.x)||!isNum(p.ld)) continue;
+    const nx=pts[i+1]&&!pts[i+1].live?pts[i+1].x:p.x+Math.min(cap,1/12);
+    const dt=Math.max(0,Math.min(nx-p.x,cap,24-p.x));
+    if(dt<=0) continue;
+    const k=dt/1000,pv=isNum(p.pv)?Math.max(0,p.pv):0,ld=Math.max(0,p.ld);
+    const gi=isNum(p.grid)?Math.max(0,p.grid):0,ex=isNum(p.grid)?Math.max(0,-p.grid):0;
+    const dis=isNum(p.bat)?Math.max(0,p.bat):0,ch=isNum(p.bat)?Math.max(0,-p.bat):0;
+
+    const solarCasaP=Math.min(ld,pv);
+    let falta=Math.max(0,ld-solarCasaP);
+    const batCasaP=Math.min(falta,dis);falta-=batCasaP;
+    const gridCasaP=Math.min(falta,gi);falta-=gridCasaP;
+    const unknownCasaP=Math.max(0,falta);
+
+    const totalPool=pool.solar+pool.grid+pool.initial;
+    const qSolar=totalPool>0?pool.solar/totalPool:0;
+    const qGrid=totalPool>0?pool.grid/totalPool:0;
+    const qInitial=totalPool>0?pool.initial/totalPool:1;
+    r.batSolarCasa+=batCasaP*k*qSolar;r.batGridCasa+=batCasaP*k*qGrid;r.batInicialCasa+=batCasaP*k*qInitial;
+    if(dis>0){
+      const take=Math.min(totalPool,dis*k);
+      pool.solar=Math.max(0,pool.solar-take*qSolar);
+      pool.grid=Math.max(0,pool.grid-take*qGrid);
+      pool.initial=Math.max(0,pool.initial-take*qInitial);
+    }
+
+    const surplus=Math.max(0,pv-solarCasaP);
+    const solarBatP=Math.min(ch,surplus);
+    const gridAvail=Math.max(0,gi-gridCasaP);
+    const gridBatP=Math.min(Math.max(0,ch-solarBatP),gridAvail);
+    const unknownBatP=Math.max(0,ch-solarBatP-gridBatP);
+    pool.solar+=solarBatP*k;pool.grid+=gridBatP*k;pool.initial+=unknownBatP*k;
+    const solarExportP=Math.min(ex,Math.max(0,surplus-solarBatP));
+    const solarOutroP=Math.max(0,pv-solarCasaP-solarBatP-solarExportP);
+
+    const mins=Math.floor(p.x*60),d=pdate(C.date);
+    d.setHours(Math.floor(mins/60),mins%60,0,0);
+    const fv=isFVmin(d.getDay(),mins,isVerao(d)),price=precoKwh(C.date,fv);
+    const solarUsed=(solarCasaP+batCasaP*qSolar)*k;
+
+    r.ld+=ld*k;r.pv+=pv*k;r.gridTotal+=gi*k;r.gridCasa+=gridCasaP*k;r.gridBat+=gridBatP*k;
+    r.solarCasa+=solarCasaP*k;r.solarBat+=solarBatP*k;r.exportado+=solarExportP*k;r.solarOutro+=solarOutroP*k;
+    r.batCasa+=batCasaP*k;r.unknownCasa+=unknownCasaP*k;r.batCarga+=ch*k;r.batDescarga+=dis*k;
+    r.custoRede+=gi*k*price;r.poupSolar+=solarUsed*price;
+    if(fv){r.gridF+=gi*k;r.solarF+=solarUsed;}else{r.gridV+=gi*k;r.solarV+=solarUsed;}
+  }
+  FLOW_CACHE={key,value:r};
+  return r;
+}
+
 // POUPANÇA DO DIA = kWh consumidos vindos do solar/bateria × preço que se pagaria à rede nesse momento
 function poupancaDia(ds,d){
-  const k=Math.max(0,(d.ld||0)-(d.gr||0));
+  const f=ds===todayStr()?fluxosHoje():null;
+  if(f) return {kwh:f.solarCasa+f.batSolarCasa,eur:f.poupSolar,exact:true,fv:f.solarF+f.solarV>0?f.solarF/(f.solarF+f.solarV):0};
+  // Sem curva/proveniência da bateria, usa uma estimativa conservadora que nunca excede a produção solar.
+  const k=Math.max(0,Math.min(d.pv||0,(d.ld||0)-Math.min(d.gr||0,d.ld||0)));
   const sh=shareFV(ds,'s');
   const eurV=k*(sh.fv*precoKwh(ds,true)+(1-sh.fv)*precoKwh(ds,false));
-  return {kwh:k,eur:eurV,exact:sh.exact,fv:sh.fv};
+  return {kwh:k,eur:eurV,exact:false,fv:sh.fv};
 }
 function receitaDia(d){const t=T();return t.upac?(d.ex||0)*t.sell:0;}
 function custoRedeDia(ds,d){
+  const f=ds===todayStr()?fluxosHoje():null;
+  if(f) return {kwh:f.gridTotal,fv:f.gridF,vz:f.gridV,eur:f.custoRede,exact:true};
   const g=d.gr||0,sh=shareFV(ds,'i');
   return {kwh:g,fv:g*sh.fv,vz:g*(1-sh.fv),eur:g*(sh.fv*precoKwh(ds,true)+(1-sh.fv)*precoKwh(ds,false)),exact:sh.exact};
 }
@@ -1320,8 +1394,9 @@ async function copySavedPassword(){
 // ═══════════════════════════════════════════════════════
 function setToday(d,src){
   const ds=todayStr(),dd={...d};
-  // Sem compra à rede no total de hoje → integra a curva de 5 min
-  if(!isNum(dd.gr)&&S.todayBuckets) dd.gr=Math.round((S.todayBuckets.iF+S.todayBuckets.iV)*1000)/1000;
+  // O total diário do equipamento pode vir a zero mesmo quando a curva mostra importação.
+  // A curva mede toda a energia da rede, incluindo a usada para carregar a bateria.
+  if(S.todayBuckets) dd.gr=Math.round((S.todayBuckets.iF+S.todayBuckets.iV)*1000)/1000;
   S.today={...dd,src,day:ds};
   putDay(ds,dd,src);
   saveDays();
@@ -1375,6 +1450,7 @@ async function loadCurve(){
         S.curve={src:'sm',date:today,loadedAt:Date.now(),
           pts:rows.map(r=>({x:hourOf(r[0]),pv:r[1],ld:r[2],grid:r[3],bat:r[4],soc:r[5]}))};
         S.todayBuckets=bucketsFromRows(rows);
+        if(S.today&&S.todayBuckets) setToday(S.today,S.today.src||'sm');
         S.soldToday=soldFromRows(rows,12);
         if(S.page==='tech') renderDesperdicio();
         renderCharts();renderDaySummary();renderPeriodos();
@@ -1603,55 +1679,75 @@ function updateFlow(pv,ld,g,soc,b,temp){
 
 function renderDaySummary(){
   const d=S.today;if(!d) return;
-  st('t-pv',fkwh(d.pv));st('t-ld',fkwh(d.ld));st('t-gr',fkwh(d.gr));
-  st('t-ex',fkwh(d.ex));st('t-bc',fkwh(d.bc));st('t-bd',fkwh(d.bd));
-  st('hero-today',fkwh(d.pv));
+  const b=balancoDia(d),c=custoRedeDia(todayStr(),d);
+  st('t-pv',fkwh(b.pv));st('t-ld',fkwh(b.ld));st('t-gr',fkwh(c.kwh));
+  st('t-ex',fkwh(b.exportado));st('t-bc',fkwh(d.bc));st('t-bd',fkwh(d.bd));
+  st('hero-today',fkwh(b.pv));
   renderBalanco(d);
   if(hasDay(d)){
     const p=poupancaDia(todayStr(),d);
     st('t-sav',eur(p.eur));
-    st('t-sav-s',nf(p.kwh,1)+' kWh gastos pela casa sem comprar à rede · '+(p.exact?'preço de cada momento':'Fora Vazio/Vazio estimado'));
+    st('t-sav-s',nf(p.kwh,1)+' kWh solares usados pela casa · energia carregada da rede não conta como solar');
   }
 }
 
 // De onde veio a energia da casa (solar direto / bateria / rede) e para onde foi o solar (casa / bateria / exportado)
 function balancoDia(d){
+  const f=fluxosHoje();
+  if(f) return {
+    curve:true,ld:f.ld,pv:f.pv,bc:isNum(d.bc)?d.bc:f.batCarga,bd:isNum(d.bd)?d.bd:f.batDescarga,
+    daRede:f.gridCasa,daBat:f.batCasa,doSolar:f.solarCasa,
+    batSolar:f.batSolarCasa,batRede:f.batGridCasa,batInicial:f.batInicialCasa,
+    incerto:f.unknownCasa,paraCasa:f.solarCasa,paraBat:f.solarBat,
+    exportado:f.exportado,pvOutro:f.solarOutro,redeBat:f.gridBat,
+    redeTotal:f.gridTotal,redeOutro:Math.max(0,f.gridTotal-f.gridCasa-f.gridBat)
+  };
   const v=k=>isNum(d[k])&&d[k]>0?d[k]:0;
   const ld=v('ld'),gr=v('gr'),bd=v('bd'),pv=v('pv'),ex=v('ex');
-  const daRede=Math.min(gr,ld), daBat=Math.min(bd,ld-daRede), doSolar=Math.max(0,ld-daRede-daBat);
-  const paraCasa=Math.min(doSolar,pv), exportado=Math.min(ex,pv-paraCasa), paraBat=Math.max(0,pv-paraCasa-exportado);
-  return {ld,pv,bc:v('bc'),bd,daRede,daBat,doSolar,paraCasa,paraBat,exportado};
+  const daRede=Math.min(gr,ld),daBat=Math.min(bd,Math.max(0,ld-daRede));
+  const doSolar=Math.min(pv,Math.max(0,ld-daRede-daBat));
+  const incerto=Math.max(0,ld-daRede-daBat-doSolar);
+  const paraCasa=doSolar,exportado=Math.min(ex,Math.max(0,pv-paraCasa));
+  const paraBat=Math.max(0,pv-paraCasa-exportado);
+  return {curve:false,ld,pv,bc:v('bc'),bd,daRede,daBat,doSolar,batSolar:0,batRede:0,batInicial:daBat,
+    incerto,paraCasa,paraBat,exportado,pvOutro:0,redeBat:0,redeTotal:gr,redeOutro:0};
 }
 function renderBalanco(d){
-  const b=balancoDia(d),t=T();
-  // Percurso da carga (curva de 5 min): meia-noite → mínimo → agora
-  const sp=S.curve&&S.curve.date===todayStr()?S.curve.pts.filter(p=>isNum(p.soc)):[];
-  const p0=sp.length>3&&sp[0].x<1?sp[0]:null;
-  const pMin=p0?sp.reduce((a,p)=>p.soc<a.soc?p:a,p0):null, pN=sp.length?sp[sp.length-1]:null;
-  // Energia da bateria gasta até ao mínimo da manhã = guardada no dia anterior
-  const ontem=p0&&pMin&&pMin.x>p0.x&&pMin.soc<p0.soc?Math.min(b.daBat,(p0.soc-pMin.soc)/100*t.batCap):0;
-  const hoje=Math.max(0,b.daBat-ontem);
-  // p = [cor, kWh, rótulo, esbatido]
+  const b=balancoDia(d);
   const seg=p=>`<div style="flex:${p[1].toFixed(3)} 1 0;background:var(--c-${p[0]})${p[3]?';opacity:.5':''}" title="${esc(p[2])}"></div>`;
   const bar=(id,parts,tot)=>sethtml(id,tot>0.05?parts.filter(p=>p[1]>0.05).map(seg).join(''):'');
-  const leg=(id,parts,tot)=>sethtml(id,parts.map(p=>`<div><span class="key ${p[0]}"${p[3]?' style="opacity:.5"':''}></span>${esc(p[2])}<b>${nf(p[1],1)} kWh${tot>0.05?' · '+nf(p[1]/tot*100,0)+'%':''}</b></div>`).join(''));
-  // A carga da bateria não é consumo da casa: fica em "para onde foi o solar" e em "Bateria hoje"
-  const src=ontem>0.5
-    ?[['solar',b.doSolar,'Do solar de hoje, na hora'],['bat',ontem,'Da bateria · solar guardado ontem',1],['bat',hoje,'Da bateria · solar de hoje'],['rede',b.daRede,'Da rede']]
-    :[['solar',b.doSolar,'Do solar de hoje, na hora'],['bat',b.daBat,'Da bateria (solar guardado)'],['rede',b.daRede,'Da rede']];
-  const dst=[['casa',b.paraCasa,'Para a casa, na hora'],['bat',b.paraBat,'Para a bateria (para mais tarde)'],['rede',b.exportado,'Para a rede']];
+  const leg=(id,parts,tot)=>sethtml(id,parts.filter(p=>p[1]>0.02).map(p=>`<div><span class="key ${p[0]}"${p[3]?' style="opacity:.5"':''}></span>${esc(p[2])}<b>${nf(p[1],1)} kWh${tot>0.05?' · '+nf(p[1]/tot*100,0)+'%':''}</b></div>`).join(''));
+
+  const src=b.curve
+    ?[['solar',b.doSolar,'Do solar, diretamente'],['solar',b.batSolar,'Da bateria · carregada pelo solar'],
+      ['rede',b.batRede,'Da bateria · carregada pela rede'],['bat',b.batInicial,'Da bateria · já armazenada à meia-noite',1],
+      ['rede',b.daRede,'Da rede, diretamente'],['bat',b.incerto,'Origem por reconciliar',1]]
+    :[['solar',b.doSolar,'Do solar, diretamente'],['bat',b.daBat,'Da bateria · origem não apurada',1],
+      ['rede',b.daRede,'Da rede, diretamente'],['bat',b.incerto,'Origem por reconciliar',1]];
+  const dst=[['casa',b.paraCasa,'Para a casa, diretamente'],['bat',b.paraBat,'Para a bateria'],
+    ['rede',b.exportado,'Para a rede'],['bat',b.pvOutro,'Perdas/diferença da curva',1]];
+
   st('bal-ld',fkwh(b.ld));st('bal-pv',fkwh(b.pv));
   bar('bal-src',src,b.ld);leg('bal-src-leg',src,b.ld);
   bar('bal-dst',dst,b.pv);leg('bal-dst-leg',dst,b.pv);
+
   const saldo=b.bc-b.bd;
   st('bal-bat',(saldo>=0?'+':'−')+nf(Math.abs(saldo),1)+' kWh');
-  sethtml('bal-bat-leg',[['bat',b.bc,'Entrou (carga)'],['bat',b.bd,'Saiu para a casa (descarga)']]
-    .map(p=>`<div><span class="key ${p[0]}"></span>${esc(p[2])}<b>${nf(p[1],1)} kWh</b></div>`).join(''));
+  const batRows=b.curve
+    ?[['solar',b.paraBat,'Carga vinda do solar'],['rede',b.redeBat,'Carga vinda da rede'],
+      ['bat',b.bd,'Saiu da bateria (descarga)']]
+    :[['bat',b.bc,'Entrou (carga)'],['bat',b.bd,'Saiu da bateria (descarga)']];
+  sethtml('bal-bat-leg',batRows.filter(p=>p[1]>0.02).map(p=>`<div><span class="key ${p[0]}"></span>${esc(p[2])}<b>${nf(p[1],1)} kWh</b></div>`).join(''));
+
   const partes=[];
-  if(p0&&pN) partes.push('Carga da bateria: '+nf(p0.soc,0)+'% à meia-noite'+(pMin.soc<p0.soc-2&&pMin!==pN?' → '+nf(pMin.soc,0)+'% às '+hLabel(pMin.x)+' (mínimo)':'')+' → '+nf(pN.soc,0)+'% às '+hLabel(pN.x)+'.');
-  if(ontem>0.5) partes.push('Até às '+hLabel(pMin.x)+' a casa gastou ≈ '+nf(ontem,1)+' kWh de solar guardado ontem; dos '+nf(b.paraBat,1)+' kWh guardados hoje, o que a casa gastar depois da meia-noite conta no balanço de amanhã.');
-  else if(b.bc>0.5) partes.push('Os '+nf(b.paraBat,1)+' kWh guardados hoje na bateria vão ser gastos mais tarde e contam nesse momento.');
-  partes.push('Para a poupança, cada kWh solar conta uma só vez: quando a casa o gasta.');
+  if(b.curve){
+    partes.push('A rede forneceu '+nf(b.redeTotal,1)+' kWh no total: '+nf(b.daRede,1)+' kWh diretamente à casa e '+nf(b.redeBat,1)+' kWh para carregar a bateria.');
+    partes.push('Quando a bateria descarrega, a app distingue a parte carregada pela rede, pelo solar e a energia que já estava armazenada à meia-noite.');
+    if(b.redeOutro>0.3) partes.push(nf(b.redeOutro,1)+' kWh correspondem a perdas/diferenças de medição.');
+  }else{
+    partes.push('Sem curva completa não é possível saber com rigor se a bateria foi carregada pela rede ou pelo solar; por isso a origem não é inventada.');
+  }
+  partes.push('A poupança solar só conta energia cuja origem solar é identificável.');
   st('bal-note',partes.join(' '));
 }
 
@@ -1858,22 +1954,23 @@ function precoTxt(ds){
 function renderFinHoje(){
   const ds=todayStr(),d=S.today;
   if(!d||!hasDay(d)){st('d-sav-s','A aguardar dados de hoje...');return;}
-  const p=poupancaDia(ds,d),c=custoRedeDia(ds,d),t=T();
+  const p=poupancaDia(ds,d),c=custoRedeDia(ds,d),t=T(),bl=balancoDia(d);
   st('d-sav',fkwh(p.kwh,1));
-  const bl=balancoDia(d);
-  st('d-sav-s','Solar direto '+nf(bl.doSolar,1)+' + bateria '+nf(bl.daBat,1)+' kWh\nConsumo '+nf(d.ld,1)+' − rede '+nf(d.gr,2)+' kWh · '+nf(p.fv*100,0)+'% em Fora Vazio'+(p.exact?' (medido)':' (estimado)')+'\n'+precoTxt(ds));
+  st('d-sav-s','Solar direto '+nf(bl.doSolar,1)+' + bateria carregada pelo solar '+nf(bl.batSolar,1)+' kWh\n'
+    +'Não inclui '+nf(bl.batRede,1)+' kWh usados da bateria com origem na rede\n'+precoTxt(ds));
   st('d-sav-c',eur(p.eur));
   st('d-imp',fkwh(c.kwh,2));
-  st('d-imp-s','Fora Vazio '+nf(c.fv,2)+' · Vazio '+nf(c.vz,2)+' kWh'+(c.exact?' · medido':' · estimado'));
+  st('d-imp-s','Fora Vazio '+nf(c.fv,2)+' · Vazio '+nf(c.vz,2)+' kWh · inclui '+nf(bl.redeBat,1)+' kWh para carregar a bateria');
   st('d-imp-c',eur(c.eur));
-  st('d-exp',fkwh(d.ex,1));
+  st('d-exp',fkwh(bl.exportado,1));
   st('d-exp-s',t.upac?'Venda UPAC a '+nf(t.sell,3)+' €/kWh':'Sem contrato UPAC — energia não remunerada');
-  st('d-exp-c',t.upac?'+'+eur(receitaDia(d)):'0,00 €');
-  const as=d.ld>0?clamp((d.ld-d.gr)/d.ld*100,0,100):null;
-  const ac=d.pv>0?clamp((d.pv-(d.ex||0))/d.pv*100,0,100):null;
-  st('d-auto',as===null?'—':nf(as,0)+'%');
-  st('d-auto-s','Consumo coberto pelo solar/bateria · solar aproveitado em casa: '+(ac===null?'—':nf(ac,0)+'%'));
-  st('d-auto-c',eur(c.eur-receitaDia(d))+' / '+eur(c.eur+p.eur));
+  st('d-exp-c',t.upac?'+'+eur(bl.exportado*t.sell):'0,00 €');
+  const semRedeAgora=bl.ld>0?clamp((bl.ld-bl.daRede)/bl.ld*100,0,100):null;
+  const solarReal=bl.ld>0?clamp((bl.doSolar+bl.batSolar)/bl.ld*100,0,100):null;
+  st('d-auto',semRedeAgora===null?'—':nf(semRedeAgora,0)+'%');
+  st('d-auto-s','Sem importação direta no momento: '+(semRedeAgora===null?'—':nf(semRedeAgora,0)+'%')
+    +' · coberto por solar de origem confirmada: '+(solarReal===null?'—':nf(solarReal,0)+'%'));
+  st('d-auto-c',eur(c.eur-bl.exportado*(t.upac?t.sell:0))+' custo líquido · '+eur(p.eur)+' benefício solar');
 }
 
 function setHistMode(m){S.histMode=m;$('seg-d').className=m==='d'?'on':'';$('seg-m').className=m==='m'?'on':'';renderHistorico();}
