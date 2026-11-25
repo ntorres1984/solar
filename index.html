@@ -2647,18 +2647,19 @@ $('fat-form').addEventListener('submit',onFaturaSubmit);
 $('lock-form').addEventListener('submit',e=>{e.preventDefault();const v=$('lock-pwd').value;if(v)tryUnlock(v);});
 window.addEventListener('error',e=>console.error('[APP]',e.message));
 
-// Faturas EDP reais (leituras reais do contador). Não substituem faturas introduzidas à mão.
-const FATURAS_EDP=[
+// Faturas reais (leituras reais do contador). Não substituem faturas introduzidas à mão.
+const FATURAS_REAIS=[
   {mes:'2026-05',valor:87.09,kwhV:228,kwhFV:21},   // 23/04 → 22/05
   {mes:'2026-06',valor:78.57,kwhV:188,kwhFV:18},   // 23/05 → 22/06
   {mes:'2026-07',valor:62.67,kwhV:73,kwhFV:17},    // 23/06 → 22/07
   {mes:'2026-08',valor:64.97,kwhV:79,kwhFV:17},    // 23/07 → 22/08
   {mes:'2026-09',valor:69.93,kwhV:89,kwhFV:35},    // 23/08 → 22/09
   {mes:'2026-10',valor:59.80,kwhV:70,kwhFV:20,fornecedor:'EDP',de:'2026-09-23',ate:'2026-10-20',final:true}, // rescisão EDP
+  {mes:'2026-11',valor:128.44,kwhV:552,kwhFV:75,fornecedor:'SU Eletricidade',de:'2026-10-21',ate:'2026-11-21'}, // 1.ª fatura SU
 ];
 (function(){
   if(!lsGet('fatura_2026-04')) lsSet('fatura_2026-04',JSON.stringify({mes:'2026-04',economia:62.42,valor:null,kwh:null,ts:Date.now()}));
-  for(const f of FATURAS_EDP){
+  for(const f of FATURAS_REAIS){
     const cur=lsJSON('fatura_'+f.mes,null);
     if(cur&&cur.fonte!=='pdf'&&isNum(cur.kwhV)) continue; // introduzida à mão com repartição: manter
     lsSet('fatura_'+f.mes,JSON.stringify({...(cur||{}),...f,kwh:f.kwhV+f.kwhFV,economia:cur&&isNum(cur.economia)?cur.economia:null,fonte:'pdf',ts:Date.now()}));
