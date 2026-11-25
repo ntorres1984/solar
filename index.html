@@ -955,11 +955,11 @@ const S={
   backfill:{running:false,done:0,total:0,fail:0},
   histMode:'d', finTab:'d', page:'live', todayView:'chart',
 };
-let SLOTS=lsJSON('slots_v1',{});      // data → {sF,sV,iF,iV} kWh solar/rede em Fora Vazio / Vazio (curva 5 min)
+let SLOTS=lsJSON('slots_v2',{});      // data → produção solar e compra à rede em Fora Vazio / Vazio (curva 5 min)
 const SRC_RANK={local:0,dy:1,sm:2};
 
 function saveDays(){return lsSet('days_v2',JSON.stringify(S.days));}
-function saveSlots(){return lsSet('slots_v1',JSON.stringify(SLOTS));}
+function saveSlots(){return lsSet('slots_v2',JSON.stringify(SLOTS));}
 
 // ─── Sinais SOLARMAN (bateria/rede) calibrados pelo balanço de potência ───
 // Em cada instante: solar + rede + bateria ≈ casa (app: rede + = compra, bateria + = descarga).
@@ -1051,21 +1051,22 @@ function migrateLegacy(){
 // ═══════════════════════════════════════════════════════
 // Integra a curva de 5 min: kWh consumidos do solar/bateria e kWh comprados, em Fora Vazio e Vazio
 function bucketsFromRows(rows){
-  let sF=0,sV=0,iF=0,iV=0,n=0;
+  let sF=0,sV=0,iF=0,iV=0,pF=0,pV=0,n=0;
   for(let i=0;i<rows.length;i++){
-    const r=rows[i],ld=r[2],g=r[3];
+    const r=rows[i],ld=r[2],g=r[3],pv=r[1];
     if(!isNum(ld)) continue;
     const dt=rows[i+1]?Math.min(900,rows[i+1][0]-r[0]):300;
     if(dt<=0) continue;
-    const h=dt/3600, imp=isNum(g)&&g>0?g:0, self=Math.max(0,ld-imp);
+    const h=dt/3600,imp=isNum(g)&&g>0?g:0,self=Math.max(0,ld-imp),prod=isNum(pv)?Math.max(0,pv):0;
     const d=new Date(r[0]*1000);
     const fv=isFVmin(d.getDay(),d.getHours()*60+d.getMinutes(),isVerao(d));
-    if(fv){sF+=self*h/1000;iF+=imp*h/1000;}else{sV+=self*h/1000;iV+=imp*h/1000;}
+    if(fv){sF+=self*h/1000;iF+=imp*h/1000;pF+=prod*h/1000;}
+    else{sV+=self*h/1000;iV+=imp*h/1000;pV+=prod*h/1000;}
     n++;
   }
   if(n<12) return null;
   const r3=v=>Math.round(v*1000)/1000;
-  return {sF:r3(sF),sV:r3(sV),iF:r3(iF),iV:r3(iV)};
+  return {sF:r3(sF),sV:r3(sV),iF:r3(iF),iV:r3(iV),pF:r3(pF),pV:r3(pV)};
 }
 const dayType=ds=>{const w=pdate(ds).getDay();return w===0?'dom':w===6?'sab':'util';};
 let AVG=null;
@@ -1075,7 +1076,8 @@ function avgShares(){
   for(const [ds,b] of Object.entries(SLOTS)){
     if(!b||!isNum(b.sF)) continue;
     const k=dayType(ds);acc[k]=acc[k]||{sF:0,sV:0,iF:0,iV:0};
-    acc[k].sF+=b.sF;acc[k].sV+=b.sV;acc[k].iF+=b.iF;acc[k].iV+=b.iV;
+    acc[k].sF+=isNum(b.pF)?b.pF:b.sF;acc[k].sV+=isNum(b.pV)?b.pV:b.sV;
+    acc[k].iF+=b.iF;acc[k].iV+=b.iV;
   }
   AVG={};
   for(const [k,a] of Object.entries(acc)){
@@ -1087,10 +1089,11 @@ function avgShares(){
 function shareFV(ds,kind){
   const b=ds===todayStr()?S.todayBuckets:SLOTS[ds];
   if(b&&isNum(b.sF)){
-    const f=kind==='s'?b.sF:b.iF, v=kind==='s'?b.sV:b.iV;
+    const f=kind==='s'?(isNum(b.pF)?b.pF:b.sF):b.iF;
+    const v=kind==='s'?(isNum(b.pV)?b.pV:b.sV):b.iV;
     if(f+v>0.05) return {fv:f/(f+v),exact:true};
   }
-  if(kind==='i'){ const fs=invoiceShare(ds); if(fs!==null) return {fv:fs,exact:false}; }
+  if(kind==='i'){const fs=invoiceShare(ds);if(fs!==null)return {fv:fs,exact:false};}
   const a=avgShares()[dayType(ds)];
   if(a&&isNum(a[kind])) return {fv:a[kind],exact:false};
   return {fv:fvFraction(ds),exact:false};
@@ -1152,7 +1155,9 @@ function fluxosHoje(){
     const mins=Math.floor(p.x*60),d=pdate(C.date);
     d.setHours(Math.floor(mins/60),mins%60,0,0);
     const fv=isFVmin(d.getDay(),mins,isVerao(d)),price=precoKwh(C.date,fv);
-    const solarUsed=(solarCasaP+batCasaP*qSolar)*k;
+    // Para o retorno, cada kWh solar conta uma vez no momento da produção:
+    // o que ficou na casa/bateria vale o preço de compra evitado; exportação fica de fora.
+    const solarUsed=Math.max(0,pv-solarExportP)*k;
 
     r.ld+=ld*k;r.pv+=pv*k;r.gridTotal+=gi*k;r.gridCasa+=gridCasaP*k;r.gridBat+=gridBatP*k;
     r.solarCasa+=solarCasaP*k;r.solarBat+=solarBatP*k;r.exportado+=solarExportP*k;r.solarOutro+=solarOutroP*k;
@@ -1167,12 +1172,13 @@ function fluxosHoje(){
 // POUPANÇA DO DIA = kWh consumidos vindos do solar/bateria × preço que se pagaria à rede nesse momento
 function poupancaDia(ds,d){
   const f=ds===todayStr()?fluxosHoje():null;
-  if(f) return {kwh:f.solarCasa+f.batSolarCasa,eur:f.poupSolar,exact:true,fv:f.solarF+f.solarV>0?f.solarF/(f.solarF+f.solarV):0};
-  // Sem curva/proveniência da bateria, usa uma estimativa conservadora que nunca excede a produção solar.
-  const k=Math.max(0,Math.min(d.pv||0,(d.ld||0)-Math.min(d.gr||0,d.ld||0)));
+  if(f) return {kwh:Math.max(0,f.pv-f.exportado),eur:f.poupSolar,exact:true,
+    fv:f.solarF+f.solarV>0?f.solarF/(f.solarF+f.solarV):0};
+  // Benefício solar = produção que ficou na casa/bateria. A exportação só conta como receita UPAC.
+  const k=Math.max(0,(d.pv||0)-(d.ex||0));
   const sh=shareFV(ds,'s');
   const eurV=k*(sh.fv*precoKwh(ds,true)+(1-sh.fv)*precoKwh(ds,false));
-  return {kwh:k,eur:eurV,exact:false,fv:sh.fv};
+  return {kwh:k,eur:eurV,exact:sh.exact,fv:sh.fv};
 }
 function receitaDia(d){const t=T();return t.upac?(d.ex||0)*t.sell:0;}
 function custoRedeDia(ds,d){
@@ -1249,28 +1255,24 @@ function calcAmort(){
   const t=T(),today=todayStr();
   if(!isIso(t.installDate)||t.installDate>today) return null;
   const dias=dateRange(t.installDate,today);
-  let eurS=0,rev=0,kwhS=0,n=0,exact=0,eurFull=0,nFull=0,prev=null,gs=null,aj=0;
+  let eurS=0,rev=0,kwhS=0,n=0,exact=0,eurFull=0,nFull=0,prev=null,gs=null;
   const gaps=[],serie=[],last30=[];
-  const ciclos=ciclosFaturados(),ajMap={};
-  for(const c of ciclos) ajMap[c.fim]=(ajMap[c.fim]||0)+c.eur;
   for(const ds of dias){
     const d=S.days[ds];
-    if(ajMap[ds]){aj+=ajMap[ds];eurFull+=ajMap[ds];}
     if(hasDay(d)){
       const p=poupancaDia(ds,d),r=receitaDia(d);
       eurS+=p.eur;rev+=r;kwhS+=p.kwh;n++;if(p.exact)exact++;
       if(ds!==today){eurFull+=p.eur+r;nFull++;if(daysBetween(ds,today)<=30)last30.push(p.eur+r);}
       if(gs){gaps.push([gs,prev]);gs=null;}
-    }else if(ds!==today){ if(!gs) gs=ds; }
-    serie.push({x:daysBetween(t.installDate,ds),y:eurS+rev+aj});
+    }else if(ds!==today){if(!gs)gs=ds;}
+    serie.push({x:daysBetween(t.installDate,ds),y:eurS+rev});
     prev=ds;
   }
   if(gs&&gs!==today) gaps.push([gs,addDays(today,-1)]);
-  const total=eurS+rev+aj, media=nFull?eurFull/nFull:0;
+  const total=eurS+rev,media=nFull?eurFull/nFull:0;
   const ritmo30=last30.length?last30.reduce((a,b)=>a+b,0)/last30.length:null;
-  const falta=Math.max(0,t.invest-total);
-  const diasFalta=media>0?Math.ceil(falta/media):null;
-  return {total,eurS,rev,aj,ciclos,kwhS,n,exact,nFull,media,ritmo30,falta,diasFalta,
+  const falta=Math.max(0,t.invest-total),diasFalta=media>0?Math.ceil(falta/media):null;
+  return {total,eurS,rev,aj:0,ciclos:[],kwhS,n,exact,nFull,media,ritmo30,falta,diasFalta,
     pct:t.invest>0?Math.min(100,total/t.invest*100):0,
     diasSistema:dias.length,gaps,serie,invest:t.invest,installDate:t.installDate};
 }
@@ -1687,7 +1689,7 @@ function renderDaySummary(){
   if(hasDay(d)){
     const p=poupancaDia(todayStr(),d);
     st('t-sav',eur(p.eur));
-    st('t-sav-s',nf(p.kwh,1)+' kWh solares usados pela casa · energia carregada da rede não conta como solar');
+    st('t-sav-s',nf(p.kwh,1)+' kWh solares produzidos e aproveitados na casa/bateria · exportação excluída');
   }
 }
 
@@ -1956,20 +1958,20 @@ function renderFinHoje(){
   if(!d||!hasDay(d)){st('d-sav-s','A aguardar dados de hoje...');return;}
   const p=poupancaDia(ds,d),c=custoRedeDia(ds,d),t=T(),bl=balancoDia(d);
   st('d-sav',fkwh(p.kwh,1));
-  st('d-sav-s','Solar direto '+nf(bl.doSolar,1)+' + bateria carregada pelo solar '+nf(bl.batSolar,1)+' kWh\n'
-    +'Não inclui '+nf(bl.batRede,1)+' kWh usados da bateria com origem na rede\n'+precoTxt(ds));
+  st('d-sav-s','Produção solar '+nf(bl.pv,1)+' − exportação '+nf(bl.exportado,1)+' = '+nf(p.kwh,1)+' kWh valorizados\n'
+    +'A energia carregada da rede na bateria não conta como solar\n'+precoTxt(ds));
   st('d-sav-c',eur(p.eur));
   st('d-imp',fkwh(c.kwh,2));
   st('d-imp-s','Fora Vazio '+nf(c.fv,2)+' · Vazio '+nf(c.vz,2)+' kWh · inclui '+nf(bl.redeBat,1)+' kWh para carregar a bateria');
   st('d-imp-c',eur(c.eur));
   st('d-exp',fkwh(bl.exportado,1));
-  st('d-exp-s',t.upac?'Venda UPAC a '+nf(t.sell,3)+' €/kWh':'Sem contrato UPAC — energia não remunerada');
+  st('d-exp-s',t.upac?'Venda UPAC a '+nf(t.sell,3)+' €/kWh':'Sem contrato UPAC — energia não entra no retorno');
   st('d-exp-c',t.upac?'+'+eur(bl.exportado*t.sell):'0,00 €');
   const semRedeAgora=bl.ld>0?clamp((bl.ld-bl.daRede)/bl.ld*100,0,100):null;
   const solarReal=bl.ld>0?clamp((bl.doSolar+bl.batSolar)/bl.ld*100,0,100):null;
   st('d-auto',semRedeAgora===null?'—':nf(semRedeAgora,0)+'%');
   st('d-auto-s','Sem importação direta no momento: '+(semRedeAgora===null?'—':nf(semRedeAgora,0)+'%')
-    +' · coberto por solar de origem confirmada: '+(solarReal===null?'—':nf(solarReal,0)+'%'));
+    +' · casa coberta por solar de origem confirmada: '+(solarReal===null?'—':nf(solarReal,0)+'%'));
   st('d-auto-c',eur(c.eur-bl.exportado*(t.upac?t.sell:0))+' custo líquido · '+eur(p.eur)+' benefício solar');
 }
 
@@ -2027,7 +2029,7 @@ function renderHistorico(){
 
 function renderRetorno(){
   const a=calcAmort(),t=T();
-  if(!a){st('amor-pct','—');st('amor-sub','Verifica a data de instalação em CONFIG');return;}
+  if(!a){st('amor-pct','—');st('amor-sub','Verifica a data de instalação em Definições');return;}
   st('amor-pct',nf(a.pct,1)+'%');
   st('amor-sub','Desde '+fmtDY(a.installDate)+' · '+a.diasSistema+' dias');
   $('amor-bar').style.width=a.pct+'%';
@@ -2044,20 +2046,18 @@ function renderRetorno(){
 
   const gapTxt=a.gaps.length?a.gaps.map(g=>g[0]===g[1]?fmtD(g[0]):fmtD(g[0])+'–'+fmtD(g[1])).join(', '):'nenhuma';
   const rows=[
-    ['Fórmula diária','(consumo − rede) × preço da rede'],
-    ['Energia solar/bateria consumida',nf(a.kwhS,0)+' kWh'],
-    ['Poupança (medição do inversor)','+'+eur(a.eurS)],
+    ['Fórmula','(solar produzido − exportado) × preço que pagarias à rede'],
+    ['Solar valorizado na casa/bateria',nf(a.kwhS,0)+' kWh'],
+    ['Compra à rede evitada','+'+eur(a.eurS)]
   ];
-  if(a.ciclos.length){
-    const dk=a.ciclos.reduce((s,c)=>s+c.delta,0);
-    rows.push(['Correção pelas faturas EDP',(a.aj>=0?'+':'')+eur(a.aj)+' · '+a.ciclos.length+' ciclo(s): contador EDP '+(dk>=0?'+':'')+nf(dk,0)+' kWh de rede']);
-  }else rows.push(['Correção pelas faturas EDP','sem ciclos faturados com todos os dias medidos']);
-  if(t.upac) rows.push(['Receita UPAC','+'+eur(a.rev)]);
+  if(t.upac) rows.push(['Receita da energia exportada','+'+eur(a.rev)]);
+  else rows.push(['Energia exportada','não entra no retorno porque não existe contrato UPAC']);
+  rows.push(['Total abatido ao investimento','−'+eur(a.total)]);
   rows.push(['Ritmo últimos 30 dias',a.ritmo30!==null?eur(a.ritmo30)+'/dia':'—']);
   rows.push(['Dias com dados',a.n+' de '+a.diasSistema]);
-  rows.push(['Preço exato (curva 5 min)',a.exact+' dias'+(S.backfill.running?' · a descarregar...':'')]);
+  rows.push(['Preço exato pela curva de produção',a.exact+' dias'+(S.backfill.running?' · a descarregar...':'')]);
   rows.push(['Dias sem dados',gapTxt]);
-  if(a.nFull<200) rows.push(['Nota','Média calculada sobretudo com meses de sol — a previsão vai ajustar no inverno']);
+  if(a.nFull<200) rows.push(['Nota','A previsão ainda é muito influenciada pelos meses com mais sol e ajustará ao longo do ano']);
   sethtml('amor-detail',rows.map(r=>`<div class="drow"><span>${esc(r[0])}</span><span>${esc(r[1])}</span></div>`).join(''));
   drawAmorChart(a);
   renderFaturaAtual();
